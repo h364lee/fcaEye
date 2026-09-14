@@ -1,9 +1,4 @@
-"""Five trials of the stimulus presentation sequence.
-
-No counterbalancing, no criterion loop, no data file. One trial per object,
-in a fixed order.
-
-Run from this folder:  python demo.py
+"""Five trials of the stimulus presentation.
 """
 
 import random

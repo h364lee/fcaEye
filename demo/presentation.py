@@ -31,6 +31,7 @@ class Presentation:
         """
         self.win = visual.Window(
             size=DISPLAY['size'],
+            screen=DISPLAY['screen'],
             units=DISPLAY['units'],
             color=DISPLAY['background'],
             fullscr=DISPLAY['fullscreen'],
