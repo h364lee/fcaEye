@@ -1,0 +1,209 @@
+{
+  "canvas_px": 400,
+  "set": "set2",
+  "attributes": {
+    "size": [
+      "big",
+      "little"
+    ],
+    "form": [
+      "circle",
+      "ellipse"
+    ],
+    "fill": [
+      "regular",
+      "irregular"
+    ]
+  },
+  "geometry": {
+    "area_set1": 0.2,
+    "area_set2": {
+      "big": 0.26,
+      "little": 0.12
+    },
+    "aspect": 2.0,
+    "hatch_spacing": 0.075,
+    "hatch_width": 0.02,
+    "dot_spacing": 0.075,
+    "dot_radius": 0.017,
+    "dot_jitter": 0.45
+  },
+  "seed": 20260910,
+  "objects": {
+    "big-circle-regular": {
+      "object": "g1",
+      "features": {
+        "size": "big",
+        "form": "circle",
+        "fill": "regular"
+      },
+      "m": [
+        1,
+        1,
+        1
+      ],
+      "file": "objects/big-circle-regular.png"
+    },
+    "big-circle-irregular": {
+      "object": "g2",
+      "features": {
+        "size": "big",
+        "form": "circle",
+        "fill": "irregular"
+      },
+      "m": [
+        1,
+        1,
+        0
+      ],
+      "file": "objects/big-circle-irregular.png"
+    },
+    "big-ellipse-regular": {
+      "object": "g5",
+      "features": {
+        "size": "big",
+        "form": "ellipse",
+        "fill": "regular"
+      },
+      "m": [
+        1,
+        0,
+        1
+      ],
+      "file": "objects/big-ellipse-regular.png"
+    },
+    "big-ellipse-irregular": {
+      "object": null,
+      "features": {
+        "size": "big",
+        "form": "ellipse",
+        "fill": "irregular"
+      },
+      "m": [
+        1,
+        0,
+        0
+      ],
+      "file": "objects/big-ellipse-irregular.png"
+    },
+    "little-circle-regular": {
+      "object": null,
+      "features": {
+        "size": "little",
+        "form": "circle",
+        "fill": "regular"
+      },
+      "m": [
+        0,
+        1,
+        1
+      ],
+      "file": "objects/little-circle-regular.png"
+    },
+    "little-circle-irregular": {
+      "object": null,
+      "features": {
+        "size": "little",
+        "form": "circle",
+        "fill": "irregular"
+      },
+      "m": [
+        0,
+        1,
+        0
+      ],
+      "file": "objects/little-circle-irregular.png"
+    },
+    "little-ellipse-regular": {
+      "object": "g3",
+      "features": {
+        "size": "little",
+        "form": "ellipse",
+        "fill": "regular"
+      },
+      "m": [
+        0,
+        0,
+        1
+      ],
+      "file": "objects/little-ellipse-regular.png"
+    },
+    "little-ellipse-irregular": {
+      "object": "g4",
+      "features": {
+        "size": "little",
+        "form": "ellipse",
+        "fill": "irregular"
+      },
+      "m": [
+        0,
+        0,
+        0
+      ],
+      "file": "objects/little-ellipse-irregular.png"
+    }
+  },
+  "object_assignment": {
+    "g1": "big-circle-regular",
+    "g2": "big-circle-irregular",
+    "g3": "little-ellipse-regular",
+    "g4": "little-ellipse-irregular",
+    "g5": "big-ellipse-regular"
+  },
+  "formal_contexts": {
+    "M3": {
+      "g1": [
+        1,
+        0,
+        0
+      ],
+      "g2": [
+        1,
+        0,
+        0
+      ],
+      "g3": [
+        0,
+        1,
+        0
+      ],
+      "g4": [
+        0,
+        1,
+        0
+      ],
+      "g5": [
+        0,
+        0,
+        1
+      ]
+    },
+    "N5": {
+      "g1": [
+        1,
+        1,
+        0
+      ],
+      "g2": [
+        1,
+        0,
+        0
+      ],
+      "g3": [
+        0,
+        0,
+        1
+      ],
+      "g4": [
+        0,
+        0,
+        1
+      ],
+      "g5": [
+        0,
+        0,
+        0
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+# Python environment -- machine specific, and 1.2 GB
+.venv/
+__pycache__/
+*.pyc
+
+# Collected data stays out of version control
+data/
+
+# macOS
+.DS_Store
