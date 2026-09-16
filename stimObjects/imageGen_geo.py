@@ -1,8 +1,8 @@
 """
 Stimulus generator, geometric sets.
 
-Two further attribute sets, each with three binary attributes, for the
-second half of the crossover. Same pipeline as imageGen.py: draw at
+Two attribute sets, each with three binary attributes.
+Same pipeline as imageGen.py: draw at
 SUPERSAMPLE scale, clip a full-canvas pattern layer with a shape mask,
 add the outline last, downsample.
 
