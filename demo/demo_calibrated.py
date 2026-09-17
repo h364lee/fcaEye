@@ -14,9 +14,10 @@ import LiveTrack
 
 import calibrate
 import geometry
+import response
 from config import CALIBRATION, PHASES
 from demo import run_trial
-from presentation import Presentation
+from presentation import Presentation, QuitRequested
 
 
 def report_calibration(pres, result):
@@ -68,14 +69,29 @@ def main():
             # and the numbers would go to the experimenter only.
             print("Calibration did not meet criterion -- continuing anyway.")
 
-        # From here GetLastResult() returns GazeX/GazeY in screen pixels
-        # centred at 0,0 -- the same frame the responders already use.
+        # From here gaze comes back as GazeX/GazeY in screen pixels centred
+        # at 0,0 -- the same frame the responders use -- because the
+        # calibration targets were given in those units.
+        #
+        # The results type is set while buffering is stopped, the order
+        # CRS's own demos use.
+        LiveTrack.StopTracking()
         LiveTrack.SetResultsTypeCalibrated()
+        LiveTrack.ClearDataBuffer()
+        LiveTrack.StartTracking()
 
-        pres.show_message("Click the object named at the centre.\n\n"
-                          "Press space to start.")
+        pres.show_message("Look at the central dot until a name appears.\n\n"
+                          "Then look at the object that name belongs to, and "
+                          "keep looking at it until the screen changes.\n\n"
+                          "Press space to start. Escape stops the session.")
         for target in pres.ring_order:
             results.append(run_trial(pres, target, PHASES["demo"]))
+    except response.FixationTimeout as e:
+        print(f"\nABORTED: {e}")
+        print("Check that the eye is in view and that gaze reads near the "
+              "dot when the participant looks at it; recalibrate if not.")
+    except QuitRequested:
+        print("\nStopped by the experimenter.")
     finally:
         LiveTrack.StopTracking()
         LiveTrack.ClearDataBuffer()

@@ -3,7 +3,20 @@
 
 import math
 
-from config import GEOMETRY
+from config import CALIBRATION, DISPLAY, GEOMETRY
+
+
+def px_per_deg():
+    """Screen pixels per degree of visual angle.
+
+    Shared so that anything expressing a distance in degrees converts it the
+    same way the calibration does. Only accurate for small angles: it takes
+    the tangent of one degree and scales linearly, so it underestimates
+    distances far from the centre.
+    """
+    px_per_mm = DISPLAY['size'][0] / CALIBRATION['screen_size_mm'][0]
+    mm_per_deg = math.tan(math.radians(1)) * CALIBRATION['view_dist_mm']
+    return mm_per_deg * px_per_mm
 
 
 def ring_positions(rotation_deg):

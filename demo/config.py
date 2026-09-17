@@ -22,11 +22,10 @@ TIMING = {
     "preview_range": (0.6, 1.0),  # jittered, so cue onset cannot be anticipated
     "feedback_dur": 0.8,
     "iti": 1.0,
-    "dwell_ms": 400,
 }
 
 PHASES = {
-    "demo": {"responder": "click", "feedback": True, "timeout": 5.0},
+    "demo": {"responder": "gaze_dwell", "feedback": True, "timeout": 5.0},
 }
 
 NAMES = {"g1": "Bala", "g2": "Kopo", "g3": "Vemi", "g4": "Zudo", "g5": "Tora"}
@@ -50,11 +49,26 @@ CALIBRATION = {
         [-9.5,0],[0,0],[9.5,0],
         [-9.5,9.5],[0,9.5],[9.5,9.5]
         ],
-    "setup_delay_ms": 1000.0,
+    "setup_delay_ms": 1200.0,
     "min_fix_dur_ms": 1200,
     "fix_timeout_s": 5,
     "fix_threshold_px": 3.1,
     "fix_dot_in_deg": 0.3,
     "fix_dot_out_deg": 0.6,
     "accuracy_threshold_deg": 0.5, # good calibration criterion < 0.5 degree error
+}
+
+# Gaze dwell selection. Pilot values, 2026-09-17.
+GAZE_DWELL = {
+    "dwell_ms": 800,          # how long gaze must hold to select
+    "stability_deg": 1.5,     # max drift from the anchor point
+    "blink_gap_ms": 300,      # untracked gap tolerated before reset
+}
+
+# Central fixation gate. The cue does not appear until the participant has
+# held gaze near the dot. Pilot values, 2026-09-17.
+FIXATION_GATE = {
+    "hold_ms": 2000,          # gaze must stay inside the radius this long
+    "radius_deg": 3.0,        # distance from screen centre that counts as on the dot
+    "timeout_s": 20,          # give up and abort the session
 }

@@ -7,13 +7,103 @@ the mouse by changing one line in a factory rather than editing trial code.
 The interface is polled, not blocking, because the trial loop also has to
 keep drawing and checking for quit.
 """
-
-import math
-
-from psychopy import core, event
+import sys
+sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
+import LiveTrack
 
 import geometry
-from config import GEOMETRY, TIMING
+from config import FIXATION_GATE, GAZE_DWELL, GEOMETRY
+from presentation import check_quit
+
+import math
+from psychopy import core, event
+
+
+class FixationTimeout(Exception):
+    """Central fixation was never held for long enough.
+
+    Raised rather than handled locally, because the session cannot continue:
+    either the tracker has lost the eye, or gaze is reading far enough from
+    where the participant is actually looking that the criterion cannot be
+    met. Both need a person to intervene.
+    """
+
+
+def newest_tracked():
+    """Newest tracked gaze position, or None if every reading was lost.
+
+    Draining the buffer keeps it small; we only want the latest reading.
+    Shared by the fixation gate and the dwell responder so both treat a
+    lost eye the same way.
+    """
+    samples = LiveTrack.GetBufferedEyePositions(1, -1, 1)
+    for s in reversed(samples):
+        if s.Tracked:
+            return (s.GazeX, s.GazeY)
+    return None
+
+
+def wait_for_central_fixation(pres):
+    """Hold here until gaze has stayed near the screen centre long enough.
+
+    Only the dot is on screen. The objects are drawn by the caller once this
+    returns, so that the participant is fixating centrally at the moment the
+    array appears.
+
+    The dot is redrawn every frame, because flipping is what advances the
+    frame and the screen has to keep refreshing while we wait.
+
+    A blink pauses the count rather than resetting it, using the same gap
+    limit as the dwell responder -- a blink is missing information, not
+    evidence that the eye moved.
+
+    Args:
+        pres: a Presentation.
+
+    Raises:
+        FixationTimeout: the hold was never achieved within timeout_s.
+    """
+    radius_px = FIXATION_GATE['radius_deg'] * geometry.px_per_deg()
+    hold_s = FIXATION_GATE['hold_ms'] / 1000
+    timeout_s = FIXATION_GATE['timeout_s']
+    blink_gap_s = GAZE_DWELL['blink_gap_ms'] / 1000
+
+    LiveTrack.ClearDataBuffer()
+    clock = core.Clock()
+    held_s = 0.0
+    last = 0.0
+    gap_start = None
+
+    while held_s < hold_s:
+        now = clock.getTime()
+        dt = now - last
+        last = now
+
+        if now > timeout_s:
+            raise FixationTimeout(
+                f"central fixation not held for {hold_s} s "
+                f"within the {timeout_s} s limit"
+            )
+
+        check_quit()
+        pos = newest_tracked()
+
+        if pos is None:
+            if gap_start is None:
+                gap_start = now
+            elif now - gap_start > blink_gap_s:
+                held_s = 0.0
+        else:
+            gap_start = None
+            # math.hypot(x, y) is the distance from the screen centre,
+            # since gaze coordinates have their origin there.
+            if math.hypot(*pos) <= radius_px:
+                held_s += dt
+            else:
+                held_s = 0.0
+
+        pres.draw_fixation()
+        pres.flip()
 
 
 class Responder:
@@ -113,98 +203,92 @@ class ClickResponder(Responder):
         """Return the stored outcome, or None if there is not one yet."""
         return self.outcome
 
+class GazeDwellResponder(Responder):
+    """Selection by holding gaze on an object.
 
-class DwellResponder(Responder):
-    """Selection by resting the pointer on an object for dwell_ms.
+    Two conditions must both hold for the count to continue:
+      1. gaze is within stability_px of the anchor (where this dwell began)
+      2. gaze is on the same object it was on at the anchor
 
-    Stands in for gaze dwell while there is no tracker.
-
-    State carried between polls:
-        dwell_on       the object the pointer is currently sitting on
-        dwell_start    the time it arrived there
-        first_move_ms  when the pointer first left the centre
-
-    Decision recorded here: leaving an object before the dwell completes
-    RESETS the dwell. Time does not accumulate across separate visits.
+    A blink pauses the count rather than resetting it, up to blink_gap_ms.
     """
 
     def __init__(self, window, positions, ring_order):
-        """Same as ClickResponder, plus the dwell threshold.
-
-        Flow:
-            1. mouse, positions, ring_order, clock
-            2. read dwell_ms from TIMING
-            3. set outcome, dwell_on, dwell_start, first_move_ms to None
-        """
-        self.mouse = event.Mouse(win=window)
         self.positions = positions
         self.ring_order = ring_order
         self.clock = core.Clock()
-        self.dwell_ms = TIMING['dwell_ms']
 
-        self.outcome = None
-        self.dwell_on = None
-        self.dwell_start = None
-        self.first_move_ms = None
+        # degrees -> pixels, same formula calibrate.py uses
+        self.stability_px = GAZE_DWELL["stability_deg"] * geometry.px_per_deg()
+        self.dwell_s = GAZE_DWELL["dwell_ms"] / 1000
+        self.blink_gap_s = GAZE_DWELL["blink_gap_ms"] / 1000
+
+        self.start()
 
     def start(self):
-        """Reset for a new trial.
-
-        Flow:
-            1. reset the clock
-            2. clear outcome, dwell_on, dwell_start, first_move_ms
-        """
         self.clock.reset()
         self.outcome = None
-        self.dwell_on = None
-        self.dwell_start = None
         self.first_move_ms = None
+        self.anchor = None        # gaze position where the current dwell began
+        self.dwell_on = None      # object at the anchor
+        self.dwell_accum = 0.0    # seconds counted so far
+        self.last_poll = 0.0
+        self.gap_start = None     # when the current untracked gap began
+        LiveTrack.ClearDataBuffer()   # discard samples recorded before the cue
+
+    def _restart(self, pos, here):
+        self.anchor = pos
+        self.dwell_on = here
+        self.dwell_accum = 0.0
+        self.gap_start = None
 
     def poll(self):
-        """Read the pointer once and update the dwell.
-
-        Flow:
-            1. if an outcome already exists, do nothing
-            2. read the pointer position and the current time
-            3. if the pointer has left the centre and first_move_ms is not
-               set yet, record it
-            4. ask geometry which object the pointer is on (may be None)
-            5. if that is different from dwell_on:
-                 the pointer just moved somewhere new -- store the new
-                 object and restart the dwell clock
-               otherwise, if it is on an object and enough time has passed:
-                 store the outcome
-
-        Note:
-            math.hypot(x, y) is the distance from the centre.
-            Step 5 is the reset decision: arriving somewhere new always
-            restarts the timer, so time never accumulates across visits.
-        """
         if self.outcome is not None:
             return
 
-        pos = self.mouse.getPos()
         now = self.clock.getTime()
+        dt = now - self.last_poll
+        self.last_poll = now
 
-        if self.first_move_ms is None and math.hypot(pos[0], pos[1]) > GEOMETRY['target_tolerance_px']:
+        pos = newest_tracked()
+
+        # No usable reading. Hold everything; the eye has not moved,
+        # we just cannot see it.
+        if pos is None:
+            if self.gap_start is None:
+                self.gap_start = now
+            elif now - self.gap_start > self.blink_gap_s:
+                self.anchor = None
+                self.dwell_on = None
+                self.dwell_accum = 0.0
+            return
+        self.gap_start = None
+
+        if (self.first_move_ms is None
+                and math.hypot(*pos) > GEOMETRY['target_tolerance_px']):
             self.first_move_ms = now * 1000
 
         here = geometry.object_at(pos, self.positions, self.ring_order)
 
-        if here != self.dwell_on:
-            self.dwell_on = here
-            self.dwell_start = now
-        elif here is not None and (now - self.dwell_start) * 1000 >= self.dwell_ms:
+        if self.anchor is None:
+            self._restart(pos, here)
+            return
+
+        drifted = math.dist(pos, self.anchor) > self.stability_px
+        if drifted or here != self.dwell_on:
+            self._restart(pos, here)
+            return
+
+        self.dwell_accum += dt
+        if self.dwell_on is not None and self.dwell_accum >= self.dwell_s:
             self.outcome = {
-                "selection": here,
+                "selection": self.dwell_on,
                 "selection_ms": now * 1000,
                 "first_move_ms": self.first_move_ms,
             }
 
     def result(self):
-        """Return the stored outcome, or None if there is not one yet."""
         return self.outcome
-
 
 def make_responder(kind, window, positions, ring_order):
     """Build the responder named in the phase config.
@@ -225,6 +309,6 @@ def make_responder(kind, window, positions, ring_order):
     """
     if kind == 'click':
         return ClickResponder(window, positions, ring_order)
-    if kind == 'dwell':
-        return DwellResponder(window, positions, ring_order)
+    if kind == 'gaze_dwell':
+        return GazeDwellResponder(window, positions, ring_order)
     raise ValueError(f"unknown responder kind: {kind}")

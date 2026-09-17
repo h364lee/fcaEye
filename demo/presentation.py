@@ -1,9 +1,28 @@
 import json
 from pathlib import Path
 
-from psychopy import event, visual
+from psychopy import core, event, visual
 
 from config import DISPLAY, GEOMETRY, NAMES, PATHS
+
+
+class QuitRequested(Exception):
+    """Escape was pressed. Stop the session."""
+
+
+def check_quit():
+    """Raise QuitRequested if escape has been pressed since the last check.
+
+    Called once per frame from every loop that can run for a while.
+
+    Raising rather than calling core.quit() is deliberate: core.quit() calls
+    sys.exit() from inside pyglet's key handler, and pyglet swallows the
+    exception, so the script carries on and the caller's cleanup never runs.
+    An exception raised here travels up normally, so the finally blocks that
+    close LiveTrack and the window still execute.
+    """
+    if event.getKeys(keyList=['escape']):
+        raise QuitRequested("escape pressed")
 
 
 class Presentation:
@@ -30,6 +49,7 @@ class Presentation:
             fullscr=DISPLAY['fullscreen'],
             allowGUI=True,
         )
+
 
         # fixation dot
         self.fixation = visual.Circle(
@@ -122,7 +142,9 @@ class Presentation:
         self.message.draw()
         self.flip()
 
-        pressed = event.waitKeys(keyList=list(keys))
+        pressed = event.waitKeys(keyList=list(keys) + ['escape'])
+        if pressed[0] == 'escape':
+            raise QuitRequested("escape pressed")
         return pressed[0]
 
     def close(self):

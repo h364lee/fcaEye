@@ -3,12 +3,12 @@
 
 import random
 
-from psychopy import core, event
+from psychopy import core
 
 import geometry
 import response
 from config import GEOMETRY, NAMES, PHASES, TIMING
-from presentation import Presentation
+from presentation import Presentation, check_quit
 
 
 def run_trial(pres, target, phase_config):
@@ -16,16 +16,16 @@ def run_trial(pres, target, phase_config):
 
     Flow:
         0. pick a rotation and compute this trial's positions
-        1. fixation alone; wait for the participant to press space
-        2. preview: objects appear, dot still shown, wait a jittered time
-        3. cue: the dot becomes the name; poll the responder until it
+        1. preview: objects appear with the dot; the trial waits until gaze
+           has been held on the dot, then a jittered extra wait
+        2. cue: the dot becomes the name; poll the responder until it
            returns something or the timeout passes, redrawing each frame
-        4. feedback, if this phase has it
-        5. blank interval
+        3. feedback, if this phase has it
+        4. blank interval
 
-    Why steps 1 and 2 are separate:
-        the array must be on screen and encoded before the cue, or the
-        response time includes finding the objects.
+    Why the preview comes before the cue:
+        the array must be on screen and encoded before the cue, or the time
+        from cue to response includes finding the objects.
 
     Why the loop redraws every frame:
         flipping is what advances the frame, and the responder needs to be
@@ -43,12 +43,15 @@ def run_trial(pres, target, phase_config):
     rotation = random.uniform(0, 360 / GEOMETRY['n_positions'])
     positions = geometry.ring_positions(rotation)
 
-    # --- 1. fixation alone ------------------------------------------------
-    pres.draw_fixation()
-    pres.flip()
-    event.waitKeys(keyList=["space"])
+    # --- 1. central fixation ----------------------------------------------
+    # The dot alone. Nothing else happens until gaze has been held on it,
+    # so every trial starts from a known eye position.
+    response.wait_for_central_fixation(pres)
 
     # --- 2. preview -------------------------------------------------------
+    # The objects appear, dot still showing. The jittered wait means the
+    # participant cannot anticipate cue onset -- without it they would
+    # control the timing themselves by choosing when to fixate.
     pres.draw_array(positions)
     pres.draw_fixation()
     pres.flip()
@@ -66,6 +69,7 @@ def run_trial(pres, target, phase_config):
 
     clock = core.Clock()
     while clock.getTime() < phase_config['timeout'] and responder.result() is None:
+        check_quit()
         responder.poll()
         pres.draw_array(positions)
         pres.draw_cue(target)
@@ -73,7 +77,7 @@ def run_trial(pres, target, phase_config):
 
     outcome = responder.result()
 
-    # --- 4. feedback ------------------------------------------------------
+    # --- 3. feedback ------------------------------------------------------
     # positions are looked up by slot: ring_order.index(name) gives the slot.
     if phase_config['feedback']:
         correct_pos = positions[pres.ring_order.index(target)]
@@ -87,7 +91,7 @@ def run_trial(pres, target, phase_config):
         pres.flip()
         core.wait(TIMING['feedback_dur'])
 
-    # --- 5. blank interval ------------------------------------------------
+    # --- 4. blank interval ------------------------------------------------
     pres.flip()
     core.wait(TIMING['iti'])
 
@@ -121,9 +125,10 @@ def main():
     pres = Presentation()
 
     pres.show_message(
-        "Fixate the central dot and press SPACE to start each trial.\n\n"
-        "Objects will appear. Keep looking at the dot.\n\n"
-        "When the dot turns into a name, click the object it belongs to."
+        "Look at the central dot until a name appears in its place.\n\n"
+        "Then look at the object that name belongs to, and keep looking "
+        "at it until the screen changes.\n\n"
+        "Press space to start."
     )
 
     results = []
