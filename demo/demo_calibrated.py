@@ -1,8 +1,6 @@
 """Five-trial demo with gaze calibration.
 
-Same trials as demo.py but with a LiveTrack gaze calibration.
-    cd demo
-    python demo_calibrated.py
+Same as demo.py but with a gaze calibration.
 """
 
 import sys
@@ -19,10 +17,7 @@ from presentation import Presentation, QuitRequested
 
 
 def report_calibration(pres, result):
-    """Show the accuracy on screen and in the terminal.
-
-    Returns:
-        True if every calibrated eye met the criterion, else False.
+    """Show the accuracy on screen and the terminal.
     """
     threshold = CALIBRATION["accuracy_threshold_deg"]
 
@@ -42,7 +37,6 @@ def report_calibration(pres, result):
         lines.append(line)
         print(line)
 
-    lines.append(f"\nCriterion: under {threshold} deg")
     lines.append("\nPress space to continue.")
     pres.show_message("\n".join(lines))
     return passed

@@ -14,13 +14,12 @@ GEOMETRY = {
     "n_positions": 5,
     "object_px": 120,
     "fixation_px": 20,            # diameter
-    "target_tolerance_px": 100,   # must stay well under half the gap between
-                                  # adjacent objects -- see geometry.check_tolerance
+    "target_tolerance_px": 100,   # radius for an object (for selection) 
     "random_rotation": False,
 }
 
 TIMING = {
-    "preview_range": (0.6, 1.0),  # jittered, so cue onset cannot be anticipated
+    "preview_range": (0.6, 1.0),  # random so cue onset cant be anticipated
     "feedback_dur": 0.8,
     "iti": 1.0,
 }
@@ -56,14 +55,14 @@ CALIBRATION = {
     "fix_threshold_px": 3.1,
     "fix_dot_in_deg": 0.3,
     "fix_dot_out_deg": 0.6,
-    "accuracy_threshold_deg": 0.5, # good calibration criterion < 0.5 degree error
+    "accuracy_threshold_deg": 0.5, # good calibration: < 0.5 degree error
 }
 
 # Gaze dwell selection. Pilot values, 2026-09-17.
 GAZE_DWELL = {
-    "dwell_ms": 1000,          # how long gaze must hold to select
-    "stability_deg": 1.5,     # max drift from the anchor point
-    "blink_gap_ms": 300,      # untracked gap tolerated before reset
+    "dwell_ms": 1000,         # how long gaze must hold to select
+    "stability_deg": 1.5,     # has to remain within 1.5 radius from that fixation
+    "blink_gap_ms": 300,      # blinks must be less than 300 ms or else restart.
 }
 
 # Central fixation gate. The cue does not appear until the participant has
