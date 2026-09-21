@@ -1,9 +1,6 @@
 """Five-trial demo with gaze calibration.
 
-Same trials as demo.py, preceded by a LiveTrack calibration pass. This
-script owns LiveTrack's lifecycle -- Init, result type, StartTracking,
-StopTracking, Close. calibrate.py only runs the routine in the middle.
-
+Same trials as demo.py but with a LiveTrack gaze calibration.
     cd demo
     python demo_calibrated.py
 """
@@ -13,6 +10,7 @@ sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
 import LiveTrack
 
 import calibrate
+import eventlog
 import geometry
 import response
 from config import CALIBRATION, PHASES
@@ -50,8 +48,22 @@ def report_calibration(pres, result):
     return passed
 
 
+def ask_participant_id():
+    """Ask in the terminal, before any window opens.
+
+    Restricted to letters, digits, - and _ because it becomes part of the
+    data file name.
+    """
+    while True:
+        pid = input("Participant ID: ").strip()
+        if pid and all(c.isalnum() or c in "-_" for c in pid):
+            return pid
+        print("Use letters, digits, - or _ only.")
+
+
 def main():
     geometry.check_tolerance()        # fail before anything opens
+    pid = ask_participant_id()
     pres = Presentation()
 
     LiveTrack.Init()
@@ -60,7 +72,7 @@ def main():
 
     results = []
     try:
-        pres.show_message("Calibration.\n\nLook at each dot until it "
+        pres.show_message("Look at each dot until it "
                           "disappears.\n\nPress space to begin.")
 
         accuracy = calibrate.gaze_calibration(pres.win)
@@ -78,21 +90,37 @@ def main():
         LiveTrack.StopTracking()
         LiveTrack.SetResultsTypeCalibrated()
         LiveTrack.ClearDataBuffer()
+
+        # Recording starts here, after calibration, so the file holds only
+        # calibrated trial data in screen pixels.
+        path = eventlog.open_session(pid)
         LiveTrack.StartTracking()
+        print(f"Recording to {path}")
+
+        eventlog.mark("session_start", participant=pid,
+                      ring_order="|".join(pres.ring_order))
+        for eye, entry in accuracy.items():
+            eventlog.mark("calibration", eye=eye,
+                          accuracy_deg=f"{entry['accuracy_deg']:.3f}",
+                          n_points=entry['n_points'])
 
         pres.show_message("Look at the central dot until a name appears.\n\n"
                           "Then look at the object that name belongs to, and "
                           "keep looking at it until the screen changes.\n\n"
-                          "Press space to start. Escape stops the session.")
-        for target in pres.ring_order:
-            results.append(run_trial(pres, target, PHASES["demo"]))
+                          "Press space to start. Press Esc to end the session.")
+        for trial_n, target in enumerate(pres.ring_order, start=1):
+            results.append(run_trial(pres, target, PHASES["demo"], trial_n))
+        eventlog.mark("session_end")
     except response.FixationTimeout as e:
+        eventlog.mark("session_aborted", reason="fixation_timeout")
         print(f"\nABORTED: {e}")
         print("Check that the eye is in view and that gaze reads near the "
               "dot when the participant looks at it; recalibrate if not.")
     except QuitRequested:
+        eventlog.mark("session_aborted", reason="escape")
         print("\nStopped by the experimenter.")
     finally:
+        eventlog.close_session()
         LiveTrack.StopTracking()
         LiveTrack.ClearDataBuffer()
         LiveTrack.Close()

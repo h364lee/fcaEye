@@ -1,60 +1,55 @@
-"""Five trials of the stimulus presentation.
-"""
+"""Trial sequence for the gaze-dwell demo."""
 
 import random
 
 from psychopy import core
 
+import eventlog
 import geometry
 import response
 from config import GEOMETRY, NAMES, PHASES, TIMING
 from presentation import Presentation, check_quit
 
 
-def run_trial(pres, target, phase_config):
-    """One trial.
+def run_trial(pres, target, phase_config, trial_n):
+    """Run one trial and return what happened.
 
-    Flow:
-        0. pick a rotation and compute this trial's positions
-        1. preview: objects appear with the dot; the trial waits until gaze
-           has been held on the dot, then a jittered extra wait
-        2. cue: the dot becomes the name; poll the responder until it
-           returns something or the timeout passes, redrawing each frame
-        3. feedback, if this phase has it
-        4. blank interval
+    1. dot alone until central fixation is held
+    2. objects appear; jittered wait
+    3. dot becomes the name; poll until selection or timeout
+    4. feedback
+    5. blank interval
 
-    Why the preview comes before the cue:
-        the array must be on screen and encoded before the cue, or the time
-        from cue to response includes finding the objects.
+    Objects appear before the cue so that cue-to-gaze time does not
+    include searching for them.
 
-    Why the loop redraws every frame:
-        flipping is what advances the frame, and the responder needs to be
-        polled once per frame. Nothing on screen changes, but the loop has
-        to keep running.
-
-    Args:
-        pres: a Presentation.
-        target: the object whose name is cued, e.g. "g1".
-        phase_config: one entry from config.PHASES.
-
-    Returns:
-        dict describing what happened.
+    Each event is marked in the tracker's data file straight after the
+    flip that shows it, so the marker lands as close as possible to the
+    moment the screen changed.
     """
-    rotation = random.uniform(0, 360 / GEOMETRY['n_positions'])
+    def mark(event, **fields):
+        eventlog.mark(event, trial=trial_n, **fields)
+
+    if GEOMETRY['random_rotation']:
+        rotation = random.uniform(0, 360 / GEOMETRY['n_positions'])
+    else:
+        rotation = 0.0
     positions = geometry.ring_positions(rotation)
 
-    # --- 1. central fixation ----------------------------------------------
-    # The dot alone. Nothing else happens until gaze has been held on it,
-    # so every trial starts from a known eye position.
+    # --- 1. central fixation ---------------------------------------------
+    pres.draw_fixation()
+    pres.flip()
+    mark("dot_on", target=target, cue=NAMES[target],
+         rotation_deg=f"{rotation:.2f}")
     response.wait_for_central_fixation(pres)
+    mark("fixation_held")
 
     # --- 2. preview -------------------------------------------------------
-    # The objects appear, dot still showing. The jittered wait means the
-    # participant cannot anticipate cue onset -- without it they would
-    # control the timing themselves by choosing when to fixate.
+    # Jittered so cue onset cannot be anticipated.
     pres.draw_array(positions)
     pres.draw_fixation()
     pres.flip()
+    mark("objects_on")
     core.wait(random.uniform(*TIMING['preview_range']))
 
     # --- 3. cue and response ---------------------------------------------
@@ -65,8 +60,11 @@ def run_trial(pres, target, phase_config):
     pres.draw_array(positions)
     pres.draw_cue(target)
     pres.flip()
+    mark("cue_on")
     responder.start()
 
+    # Redraw every frame: flipping advances the frame, and the responder
+    # is polled once per frame.
     clock = core.Clock()
     while clock.getTime() < phase_config['timeout'] and responder.result() is None:
         check_quit()
@@ -76,9 +74,13 @@ def run_trial(pres, target, phase_config):
         pres.flip()
 
     outcome = responder.result()
+    if outcome is None:
+        mark("timeout")
+    else:
+        mark("selection", object=outcome['selection'],
+             correct=outcome['selection'] == target)
 
-    # --- 3. feedback ------------------------------------------------------
-    # positions are looked up by slot: ring_order.index(name) gives the slot.
+    # --- 4. feedback ------------------------------------------------------
     if phase_config['feedback']:
         correct_pos = positions[pres.ring_order.index(target)]
 
@@ -89,10 +91,12 @@ def run_trial(pres, target, phase_config):
         pres.draw_array(positions)
         pres.draw_feedback(correct_pos, selected_pos)
         pres.flip()
+        mark("feedback_on")
         core.wait(TIMING['feedback_dur'])
 
-    # --- 4. blank interval ------------------------------------------------
+    # --- 5. blank interval ------------------------------------------------
     pres.flip()
+    mark("blank_on")
     core.wait(TIMING['iti'])
 
     return {
@@ -106,21 +110,11 @@ def run_trial(pres, target, phase_config):
 
 
 def main():
-    """Run the demo.
+    """Run one trial per object, without the tracker's lifecycle.
 
-    Flow:
-        1. check the tolerance before anything opens
-        2. build the Presentation
-        3. show instructions
-        4. one trial per object
-        5. close the window
-        6. print the results
-
-    Why the tolerance check comes first:
-        it fails loudly on a bad configuration, before a participant is
-        sitting in front of a window.
+    Use demo_calibrated.py for gaze trials; this one does not open LiveTrack.
     """
-    geometry.check_tolerance()
+    geometry.check_tolerance()      # fail before any window opens
 
     pres = Presentation()
 
@@ -132,8 +126,8 @@ def main():
     )
 
     results = []
-    for target in pres.ring_order:
-        results.append(run_trial(pres, target, PHASES['demo']))
+    for trial_n, target in enumerate(pres.ring_order, start=1):
+        results.append(run_trial(pres, target, PHASES['demo'], trial_n))
 
     pres.close()
 

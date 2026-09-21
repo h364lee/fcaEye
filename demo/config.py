@@ -16,6 +16,7 @@ GEOMETRY = {
     "fixation_px": 20,            # diameter
     "target_tolerance_px": 100,   # must stay well under half the gap between
                                   # adjacent objects -- see geometry.check_tolerance
+    "random_rotation": False,
 }
 
 TIMING = {
@@ -60,7 +61,7 @@ CALIBRATION = {
 
 # Gaze dwell selection. Pilot values, 2026-09-17.
 GAZE_DWELL = {
-    "dwell_ms": 800,          # how long gaze must hold to select
+    "dwell_ms": 1000,          # how long gaze must hold to select
     "stability_deg": 1.5,     # max drift from the anchor point
     "blink_gap_ms": 300,      # untracked gap tolerated before reset
 }
@@ -69,6 +70,6 @@ GAZE_DWELL = {
 # held gaze near the dot. Pilot values, 2026-09-17.
 FIXATION_GATE = {
     "hold_ms": 2000,          # gaze must stay inside the radius this long
-    "radius_deg": 3.0,        # distance from screen centre that counts as on the dot
+    "radius_deg": 2.5,        # distance from screen centre that counts as on the dot
     "timeout_s": 20,          # give up and abort the session
 }

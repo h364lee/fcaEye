@@ -223,7 +223,9 @@ class GazeDwellResponder(Responder):
         self.dwell_s = GAZE_DWELL["dwell_ms"] / 1000
         self.blink_gap_s = GAZE_DWELL["blink_gap_ms"] / 1000
 
-        self.start()
+        # State is set up in start(), which the trial calls at cue onset.
+        # Not called here as well, or the buffer would be cleared twice.
+        self.outcome = None
 
     def start(self):
         self.clock.reset()
