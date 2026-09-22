@@ -9,10 +9,8 @@ LiveTrack.StartTracking()
 
 try:
     # -----insert test here-----
-    for i in range(10):
-        d = LiveTrack.GetLastResult()
-        print(d.Tracked, d.GazeX, d.GazeY)
-        time.sleep(0.5)
+    data = LiveTrack.GetLastResult()
+    data
     # ---------end--------------
 finally:
     LiveTrack.StopTracking()

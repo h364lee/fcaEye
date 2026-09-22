@@ -38,8 +38,8 @@ def gaze_calibration(win):
 
     # --- 1. degrees -> pixels -------------------------------------------
     screen_res_px = DISPLAY["size"]                  # [width_px, height_px]
-    screen_size_mm = CALIBRATION["screen_size_mm"]   # [width_mm, height_mm]
-    view_dist_mm = CALIBRATION["view_dist_mm"]
+    screen_size_mm = CALIBRATION["screenSize_mm"]   # [width_mm, height_mm]
+    view_dist_mm = CALIBRATION["viewDist_mm"]
 
     px_per_mm = screen_res_px[0] / screen_size_mm[0]      # assumes square pixels
     mm_per_deg = math.tan(math.radians(1)) * view_dist_mm
@@ -53,12 +53,12 @@ def gaze_calibration(win):
     target_pos_px = target_pos_px[order]
 
     # --- 3. acquire a fixation at each target ---------------------------
-    fix_dot_in_px = CALIBRATION["fix_dot_in_deg"] * px_per_deg
-    fix_dot_out_px = CALIBRATION["fix_dot_out_deg"] * px_per_deg
-    min_dur_s = CALIBRATION["min_fix_dur_ms"] / 1000
-    setup_delay_s = CALIBRATION["setup_delay_ms"] / 1000
-    fix_timeout_s = CALIBRATION["fix_timeout_s"]
-    fix_threshold_px = CALIBRATION["fix_threshold_px"]
+    fix_dot_in_px = CALIBRATION["fixInDot_deg"] * px_per_deg
+    fix_dot_out_px = CALIBRATION["fixOutDot_deg"] * px_per_deg
+    min_dur_s = CALIBRATION["minFixDur_ms"] / 1000
+    setup_delay_s = CALIBRATION["setupDelay_ms"] / 1000
+    fix_timeout_s = CALIBRATION["fixTimeout_s"]
+    fix_threshold_px = CALIBRATION["fixThreshold_px"]
 
     _, _, sample_rate, _, _ = LiveTrack.GetCaptureConfig()
     fix_dur_samples = round(min_dur_s * sample_rate)
@@ -196,3 +196,29 @@ def gaze_calibration(win):
 
     win.flip()
     return result
+
+
+def report_calibration(pres, result):
+    """Show the accuracy on screen and the terminal.
+    """
+    threshold = CALIBRATION["calibrationCriterion_deg"]
+
+    if not result:
+        pres.show_message("No eye was calibrated.\n\nPress space to continue.")
+        print("No eye was calibrated.")
+        return False
+
+    lines = []
+    passed = True
+    for eye, entry in result.items():
+        ok = entry["accuracy_deg"] < threshold
+        passed = passed and ok
+        line = (f"{eye}: {entry['accuracy_deg']:.2f} deg "
+                f"from {entry['n_points']} targets  "
+                f"[{'PASS' if ok else 'FAIL'}]")
+        lines.append(line)
+        print(line)
+
+    lines.append("\nPress space to continue.")
+    pres.show_message("\n".join(lines))
+    return passed

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from psychopy import core, event, visual
+from psychopy import event, visual
 
 from config import DISPLAY, GEOMETRY, NAMES, PATHS
 
@@ -45,7 +45,7 @@ class Presentation:
             size=DISPLAY['size'],
             screen=DISPLAY['screen'],
             units=DISPLAY['units'],
-            color=DISPLAY['background'],
+            color=DISPLAY['bgColour'],
             fullscr=DISPLAY['fullscreen'],
             allowGUI=True,
         )
@@ -54,7 +54,7 @@ class Presentation:
         # fixation dot
         self.fixation = visual.Circle(
             self.win,
-            radius=GEOMETRY['fixation_px'] / 2, # diameter -> radius
+            radius=GEOMETRY['centralDotRadius_px'],
             fillColor="white",
             lineColor="white",
         )
@@ -72,7 +72,7 @@ class Presentation:
         # feedback highlight circle
         self.highlight = visual.Circle(
             self.win,
-            radius=GEOMETRY['object_px'] * 0.62,
+            radius=GEOMETRY['objSize_px'] * 0.62,
             fillColor=None,
             lineColor="lime",
             lineWidth=5,
@@ -88,14 +88,14 @@ class Presentation:
         Take manifest.json and object_assignment and return visual.ImageStim for each object.
         output: {object_name: ImageStim}
         """
-        stim_dir = Path(PATHS['stim_dir'])
+        stim_dir = Path(PATHS['stimDir'])
         manifest = json.loads((stim_dir / 'manifest.json').read_text())
 
         stims = {}
         for name, code in manifest['object_assignment'].items():
             file_path = stim_dir / manifest['objects'][code]['file']
             stims[name] = visual.ImageStim(self.win, image=str(file_path),
-                                           size=GEOMETRY['object_px'])
+                                           size=GEOMETRY['objSize_px'])
         return stims
 
     def draw_fixation(self):

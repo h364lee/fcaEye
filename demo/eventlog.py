@@ -27,7 +27,7 @@ def open_session(participant_id):
         the file path.
     """
     global _open
-    data_dir = PATHS['data_dir']
+    data_dir = PATHS['dataDir']
     data_dir.mkdir(parents=True, exist_ok=True)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")

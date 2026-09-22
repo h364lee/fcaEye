@@ -1,10 +1,9 @@
 """Collecting a response.
 
-One interface, several implementations. The trial code holds a Responder and
-never knows which kind it is -- that is what will let the eye tracker replace
-the mouse by changing one line in a factory rather than editing trial code.
+wait_for_central_fixation holds the trial until gaze stays on the central dot.
+GazeDwellResponder decides which object is selected after the cue.
 
-The interface is polled, not blocking, because the trial loop also has to
+The responder is polled, not blocking, because the trial loop also has to
 keep drawing and checking for quit.
 """
 import sys
@@ -12,11 +11,11 @@ sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
 import LiveTrack
 
 import geometry
-from config import FIXATION_GATE, GAZE_DWELL, GEOMETRY
+from config import CENTRAL_FIXATION, DWELL_SELECTION, GEOMETRY
 from presentation import check_quit
 
 import math
-from psychopy import core, event
+from psychopy import core
 
 
 class FixationTimeout(Exception):
@@ -63,10 +62,10 @@ def wait_for_central_fixation(pres):
     Raises:
         FixationTimeout: the hold was never achieved within timeout_s.
     """
-    radius_px = FIXATION_GATE['radius_deg'] * geometry.px_per_deg()
-    hold_s = FIXATION_GATE['hold_ms'] / 1000
-    timeout_s = FIXATION_GATE['timeout_s']
-    blink_gap_s = GAZE_DWELL['blink_gap_ms'] / 1000
+    radius_px = CENTRAL_FIXATION['centralRadius_deg'] * geometry.px_per_deg()
+    hold_s = CENTRAL_FIXATION['centralHold_ms'] / 1000
+    timeout_s = CENTRAL_FIXATION['centralTimeout_s']
+    blink_gap_s = DWELL_SELECTION['blinkTimeout_ms'] / 1000
 
     LiveTrack.ClearDataBuffer()
     clock = core.Clock()
@@ -106,8 +105,14 @@ def wait_for_central_fixation(pres):
         pres.flip()
 
 
-class Responder:
-    """Base interface.
+class GazeDwellResponder:
+    """Selection by holding gaze on an object.
+
+    Two conditions must both hold for the count to continue:
+      1. gaze is within stability_px of the anchor (where this dwell began)
+      2. gaze is on the same object it was on at the anchor
+
+    A blink pauses the count rather than resetting it, up to blinkTimeout_ms.
 
     Lifecycle:
         start()   once, at cue onset
@@ -115,119 +120,22 @@ class Responder:
         result()  each frame; returns None until a selection is made
     """
 
-    def start(self):
-        """Reset clock and internal state. Called at cue onset."""
-        raise NotImplementedError
-
-    def poll(self):
-        """Read the input device once and update internal state."""
-        raise NotImplementedError
-
-    def result(self):
-        """The outcome so far.
-
-        Returns:
-            None while no selection has been made, otherwise a dict with
-                selection       object name
-                selection_ms    time from start() to selection
-                first_move_ms   time the pointer first left the centre, or
-                                None if it has not
-        """
-        raise NotImplementedError
-
-
-class ClickResponder(Responder):
-    """Selection by clicking an object. Used in training.
-
-    Free viewing: looking at an object costs nothing, so participants can
-    inspect before answering.
-    """
-
-    def __init__(self, window, positions, ring_order):
-        """Store what every poll will need.
-
-        Flow:
-            1. build a mouse attached to this window
-            2. store positions and ring_order for the hit test
-            3. build a clock
-            4. set outcome to None -- no selection yet
-
-        Note:
-            positions and ring_order are stored, not recomputed. They are
-            facts about this trial that the caller already decided.
-        """
-        self.mouse = event.Mouse(win=window)
-        self.positions = positions
-        self.ring_order = ring_order
-        self.clock = core.Clock()
-        self.outcome = None
-
-    def start(self):
-        """Reset for a new trial.
-
-        Flow:
-            1. reset the clock to zero
-            2. clear any click that happened before now
-            3. clear the stored outcome
-        """
-        self.clock.reset()
-        self.mouse.clickReset()
-        self.outcome = None
-
-    def poll(self):
-        """Read the mouse once.
-
-        Flow:
-            1. if an outcome already exists, do nothing
-            2. if the left button is down:
-                 a. ask geometry which object the pointer is on
-                 b. if it is on one, store the outcome
-
-        Note:
-            getPressed() returns one entry per button; [0] is the left one.
-            getTime() is in seconds, so multiply by 1000 for milliseconds.
-        """
-        if self.outcome is not None:
-            return
-
-        if self.mouse.getPressed()[0]:
-            hit = geometry.object_at(self.mouse.getPos(), self.positions, self.ring_order)
-            if hit is not None:
-                self.outcome = {
-                    "selection": hit,
-                    "selection_ms": self.clock.getTime() * 1000,
-                    "first_move_ms": None,
-                }
-
-    def result(self):
-        """Return the stored outcome, or None if there is not one yet."""
-        return self.outcome
-
-class GazeDwellResponder(Responder):
-    """Selection by holding gaze on an object.
-
-    Two conditions must both hold for the count to continue:
-      1. gaze is within stability_px of the anchor (where this dwell began)
-      2. gaze is on the same object it was on at the anchor
-
-    A blink pauses the count rather than resetting it, up to blink_gap_ms.
-    """
-
-    def __init__(self, window, positions, ring_order):
+    def __init__(self, positions, ring_order):
         self.positions = positions
         self.ring_order = ring_order
         self.clock = core.Clock()
 
         # degrees -> pixels, same formula calibrate.py uses
-        self.stability_px = GAZE_DWELL["stability_deg"] * geometry.px_per_deg()
-        self.dwell_s = GAZE_DWELL["dwell_ms"] / 1000
-        self.blink_gap_s = GAZE_DWELL["blink_gap_ms"] / 1000
+        self.stability_px = DWELL_SELECTION["dwellRadius_deg"] * geometry.px_per_deg()
+        self.dwell_s = DWELL_SELECTION["dwell_ms"] / 1000
+        self.blink_gap_s = DWELL_SELECTION["blinkTimeout_ms"] / 1000
 
         # State is set up in start(), which the trial calls at cue onset.
         # Not called here as well, or the buffer would be cleared twice.
         self.outcome = None
 
     def start(self):
+        """Reset clock and internal state. Called at cue onset."""
         self.clock.reset()
         self.outcome = None
         self.first_move_ms = None
@@ -245,6 +153,7 @@ class GazeDwellResponder(Responder):
         self.gap_start = None
 
     def poll(self):
+        """Read the newest gaze sample once and update the dwell count."""
         if self.outcome is not None:
             return
 
@@ -267,7 +176,7 @@ class GazeDwellResponder(Responder):
         self.gap_start = None
 
         if (self.first_move_ms is None
-                and math.hypot(*pos) > GEOMETRY['target_tolerance_px']):
+                and math.hypot(*pos) > GEOMETRY['objSelectRadius_px']):
             self.first_move_ms = now * 1000
 
         here = geometry.object_at(pos, self.positions, self.ring_order)
@@ -290,27 +199,13 @@ class GazeDwellResponder(Responder):
             }
 
     def result(self):
+        """The outcome so far.
+
+        Returns:
+            None while no selection has been made, otherwise a dict with
+                selection       object name
+                selection_ms    time from start() to selection
+                first_move_ms   time gaze first left the centre, or
+                                None if it has not
+        """
         return self.outcome
-
-def make_responder(kind, window, positions, ring_order):
-    """Build the responder named in the phase config.
-
-    The single place that knows which class goes with which name. Adding the
-    gaze version later means adding one line here.
-
-    Flow:
-        1. if kind is "click", build a ClickResponder
-        2. if kind is "dwell", build a DwellResponder
-        3. otherwise raise an error naming the unknown kind
-
-    Args:
-        kind: the string from PHASES[...]["responder"].
-
-    Returns:
-        a Responder.
-    """
-    if kind == 'click':
-        return ClickResponder(window, positions, ring_order)
-    if kind == 'gaze_dwell':
-        return GazeDwellResponder(window, positions, ring_order)
-    raise ValueError(f"unknown responder kind: {kind}")

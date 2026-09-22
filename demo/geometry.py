@@ -14,16 +14,16 @@ def px_per_deg():
     the tangent of one degree and scales linearly, so it underestimates
     distances far from the centre.
     """
-    px_per_mm = DISPLAY['size'][0] / CALIBRATION['screen_size_mm'][0]
-    mm_per_deg = math.tan(math.radians(1)) * CALIBRATION['view_dist_mm']
+    px_per_mm = DISPLAY['size'][0] / CALIBRATION['screenSize_mm'][0]
+    mm_per_deg = math.tan(math.radians(1)) * CALIBRATION['viewDist_mm']
     return mm_per_deg * px_per_mm
 
 
 def ring_positions(rotation_deg):
     # output: the positions (x, y) of the objects along the ring
     # rotated rotation_deg degrees
-    n = GEOMETRY['n_positions']
-    r = GEOMETRY['ring_radius']
+    n = GEOMETRY['objCount']
+    r = GEOMETRY['ringRadius']
 
     obj_position = []
     for i in range(n):
@@ -41,7 +41,7 @@ def object_at(point, positions, ring_order):
     # ring_order: object names (i.e., g1, g2 ...) in slot order
 
     # output: object's name, or None if the point is not within the target radius (tolerance) of any object
-    tolerance = GEOMETRY['target_tolerance_px']
+    tolerance = GEOMETRY['objSelectRadius_px']
 
     for name, pos in zip(ring_order, positions):
         if math.dist(pos, point) < tolerance:
@@ -61,7 +61,7 @@ def check_tolerance():
     # Check if the tolerance radii of two adjacent objects overlap
 
     adj_gap = adjacent_gap()
-    tol = GEOMETRY['target_tolerance_px']
+    tol = GEOMETRY['objSelectRadius_px']
 
     if adj_gap < 2 * tol:
         raise ValueError("The distance between two closest objects is too small for this detection tolerance")
