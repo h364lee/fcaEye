@@ -1,8 +1,5 @@
 """
-Stimulus generator. 
-Three binary visual attributes (Theves, Fernandez
-and Doeller, 2020).
-    shape square|circle, element dots|lines, density sparse|dense
+Stimulus image generator
 """
 
 import argparse
