@@ -42,14 +42,14 @@ def newest_tracked():
     return None
 
 
-def wait_for_central_fixation(pres):
-    """Hold here until gaze has stayed near the screen centre long enough.
+def wait_for_central_fixation(pres, hold_s, positions=None):
+    """Hold here until gaze has stayed near the screen centre for hold_s.
 
-    Only the dot is on screen. The objects are drawn by the caller once this
-    returns, so that the participant is fixating centrally at the moment the
-    array appears.
+    Without positions, only the dot is on screen. With positions, the objects
+    are drawn too, so gaze must stay on the dot while the objects are visible.
+    If gaze leaves the dot, the count starts again from zero.
 
-    The dot is redrawn every frame, because flipping is what advances the
+    The screen is redrawn every frame, because flipping is what advances the
     frame and the screen has to keep refreshing while we wait.
 
     A blink pauses the count rather than resetting it, using the same gap
@@ -58,12 +58,13 @@ def wait_for_central_fixation(pres):
 
     Args:
         pres: a Presentation.
+        hold_s: how long gaze must stay on the dot, in seconds.
+        positions: object positions to draw, or None for the dot alone.
 
     Raises:
         FixationTimeout: the hold was never achieved within timeout_s.
     """
     radius_px = CENTRAL_FIXATION['centralRadius_deg'] * geometry.px_per_deg()
-    hold_s = CENTRAL_FIXATION['centralHold_ms'] / 1000
     timeout_s = CENTRAL_FIXATION['centralTimeout_s']
     blink_gap_s = DWELL_SELECTION['blinkTimeout_ms'] / 1000
 
@@ -101,6 +102,8 @@ def wait_for_central_fixation(pres):
             else:
                 held_s = 0.0
 
+        if positions is not None:
+            pres.draw_array(positions)
         pres.draw_fixation()
         pres.flip()
 

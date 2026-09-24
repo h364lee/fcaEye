@@ -1,6 +1,19 @@
 """
 Keep all variables here - 2026-09-12
 """
+SESSION = {
+    "yesDemographics": False,     # False: skip the questions, ID becomes "debug"
+    "yesCalibration": False,      # False: use the calibration stored in the tracker
+}
+
+GENDER_OPTIONS = [
+    "Woman",
+    "Man",
+    "Non-binary",
+    "Prefer to self-describe",
+    "Prefer not to answer",
+]
+
 DISPLAY = {
     "size": [1024, 768],
     "fullscreen": True,
@@ -10,22 +23,39 @@ DISPLAY = {
 }
 
 GEOMETRY = {
-    "ringRadius": 300,               # ring radius 
+    "ringRadius": 255,               # ring radius 
     "objCount": 5,  
     "objSize_px": 120,
-    "centralDotRadius_px": 10,       # center fixation dot radius
+    "centralDotRadius_px": 5,        # center fixation dot radius
     "objSelectRadius_px": 100,       # radius for an object for selection 
+    "feedbackCircleRadius_px": 68,   # circle around an object, in feedback
+    "feedbackNameOffset_px": 80,    # object centre to name centre, in feedback
+    "feedbackNameHeight_px": 24,     # letter height of the name, in feedback
     "randomRotation": False,
 }
 
 TIMING = {
     "previewDurRange": (0.6, 1.0),    # random from this range to prevent anticipation
-    "feedbackDur": 0.8,
+    "feedbackDur": 1.5,
     "iti": 1.0,
     "responseTimeout_s": 5.0,         # no selection by then -> trial ends as a timeout
 }
 
-NAMES = {"g1": "Bala", "g2": "Kopo", "g3": "Vemi", "g4": "Zudo", "g5": "Tora"}
+NAMES = {
+    "g1": "Bala",
+    "g2": "Kopo", 
+    "g3": "Vemi", 
+    "g4": "Zudo", 
+    "g5": "Tora"
+}
+
+OBJECTS = {
+    "g1": "big_black_square.png",
+    "g2": "big_black_tri.png",
+    "g3": "big_white_square.png",
+    "g4": "big_white_tri.png",
+    "g5": "small_black_square.png",
+}
 
 
 from pathlib import Path
@@ -33,7 +63,7 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
 PATHS = {
-    "stimDir": PROJECT_DIR / "stimObjects" / "stims",
+    "stimDir": PROJECT_DIR / "stimObj",
     "dataDir": PROJECT_DIR / "data",
 }
 
@@ -65,6 +95,6 @@ DWELL_SELECTION = {
 # Central fixation criterion for cue presentation.
 CENTRAL_FIXATION = {
     "centralHold_ms": 2000,      # how long gaze must stay inside the radius
-    "centralRadius_deg": 2.5,    # distance from screen centre that counts as on the dot
+    "centralRadius_deg": 1.25,   # distance from screen centre that counts as on the dot
     "centralTimeout_s": 20,      # give up and abort the session
 }

@@ -1,8 +1,7 @@
-"""The experiment: session flow and trial flow.
+"""experiment.py: session flow and trial flow.
 
-    python experiment.py
-
-Session: participant ID -> calibration -> recording -> one trial per object.
+Session: demographics -> calibration -> recording -> one trial per object.
+Demographics and calibration can be switched off in config.SESSION.
 """
 
 import random
@@ -16,28 +15,34 @@ import calibrate
 import eventlog
 import geometry
 import response
-from config import GEOMETRY, NAMES, TIMING
+from config import CENTRAL_FIXATION, GENDER_OPTIONS, GEOMETRY, NAMES, SESSION, TIMING
 from presentation import Presentation, QuitRequested, check_quit
 
 
-def ask_participant_id():
-    """Ask in the terminal, before any window opens.
+def ask_demographics(pres):
+    """Ask SONA ID, age and gender on the experiment screen."""
+    digits = "0123456789"
+    sona_id = pres.type_answer("SONA ID", digits)
+    age = pres.type_answer("Age", digits)
+    gender = pres.choose_option("Gender", GENDER_OPTIONS)
 
-    Restricted to letters, digits, - and _ because it becomes part of the
-    data file name.
-    """
-    while True:
-        pid = input("Participant ID: ").strip()
-        if pid and all(c.isalnum() or c in "-_" for c in pid):
-            return pid
-        print("Use letters, digits, - or _ only.")
+    self_describe = ""
+    if gender == "Prefer to self-describe":
+        self_describe = pres.type_answer("Please describe your gender",
+                                         "abcdefghijklmnopqrstuvwxyz -")
+    return {
+        "sonaID": sona_id,
+        "age": int(age),
+        "gender": gender,
+        "genderSelfDescribe": self_describe,
+    }
 
 
 def run_trial(pres, target, trial_n):
     """Run one trial and return what happened.
 
     1. dot alone until central fixation is held
-    2. objects appear; jittered wait
+    2. objects appear; gaze must stay on the dot for a jittered time
     3. dot becomes the name; poll until selection or timeout
     4. feedback
     5. blank interval
@@ -63,7 +68,7 @@ def run_trial(pres, target, trial_n):
     pres.flip()
     mark("dot_on", target=target, cue=NAMES[target],
          rotation_deg=f"{rotation:.2f}")
-    response.wait_for_central_fixation(pres)
+    response.wait_for_central_fixation(pres, CENTRAL_FIXATION['centralHold_ms'] / 1000)
     mark("fixation_held")
 
     # --- 2. preview -------------------------------------------------------
@@ -72,7 +77,10 @@ def run_trial(pres, target, trial_n):
     pres.draw_fixation()
     pres.flip()
     mark("objects_on")
-    core.wait(random.uniform(*TIMING['previewDurRange']))
+    # Gaze must stay on the dot, unbroken, for a random time before the
+    # name appears; the random length keeps the name from being anticipated.
+    response.wait_for_central_fixation(
+        pres, random.uniform(*TIMING['previewDurRange']), positions)
 
     # --- 3. cue and response ---------------------------------------------
     responder = response.GazeDwellResponder(positions, pres.ring_order)
@@ -101,14 +109,8 @@ def run_trial(pres, target, trial_n):
              correct=outcome['selection'] == target)
 
     # --- 4. feedback ------------------------------------------------------
-    correct_pos = positions[pres.ring_order.index(target)]
-
-    selected_pos = None
-    if outcome is not None:
-        selected_pos = positions[pres.ring_order.index(outcome['selection'])]
-
-    pres.draw_array(positions)
-    pres.draw_feedback(correct_pos, selected_pos)
+    selection = None if outcome is None else outcome['selection']
+    pres.draw_feedback(target, selection, positions)
     pres.flip()
     mark("feedback_on")
     core.wait(TIMING['feedbackDur'])
@@ -130,7 +132,6 @@ def run_trial(pres, target, trial_n):
 
 def main():
     geometry.check_tolerance()        # fail before anything opens
-    pid = ask_participant_id()
     pres = Presentation()
 
     LiveTrack.Init()
@@ -138,15 +139,25 @@ def main():
     LiveTrack.StartTracking()
 
     results = []
+    accuracy = {}                     # stays empty if calibration is skipped
+    participant = {"sonaID": "debug", "age": "", "gender": "",
+                   "genderSelfDescribe": ""}
     try:
-        pres.show_message("Look at each dot until it "
-                          "disappears.\n\nPress space to begin.")
+        # Inside the try, so Esc during the questions still closes the
+        # window and the tracker.
+        if SESSION["yesDemographics"]:
+            participant = ask_demographics(pres)
+        pid = participant["sonaID"]
 
-        accuracy = calibrate.gaze_calibration(pres.win)
-        if not calibrate.report_calibration(pres, accuracy):
-            # In the real experiment this is where you would recalibrate,
-            # and the numbers would go to the experimenter only.
-            print("Calibration did not meet criterion -- continuing anyway.")
+        if SESSION["yesCalibration"]:
+            pres.show_message("Look at each dot until it "
+                              "disappears.\n\nPress space to begin.")
+
+            accuracy = calibrate.gaze_calibration(pres.win)
+            if not calibrate.report_calibration(pres, accuracy):
+                # In the real experiment this is where you would recalibrate,
+                # and the numbers would go to the experimenter only.
+                print("Calibration did not meet criterion -- continuing anyway.")
 
         # From here gaze comes back as GazeX/GazeY in screen pixels centred
         # at 0,0 -- the same frame the responders use -- because the
@@ -193,6 +204,7 @@ def main():
         LiveTrack.Close()
         pres.close()
 
+    print(participant)
     for r in results:
         print(r)
 

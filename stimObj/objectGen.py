@@ -11,7 +11,7 @@ shapes = ["tri", "square"]
 for size in sizes:
     for colour in colours:
         for shape in shapes:
-            img = Image.new("RGB", (400, 400), (200, 200, 200))
+            img = Image.new("RGBA", (400, 400), (0, 0, 0, 0))
             draw = ImageDraw.Draw(img)
 
             fill = (0, 0, 0) if colour == "black" else (255, 255, 255)
