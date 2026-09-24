@@ -6,6 +6,7 @@ Demographics and calibration can be switched off in config.SESSION.
 
 import random
 import sys
+from datetime import datetime
 sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
 import LiveTrack
 
@@ -15,7 +16,9 @@ import calibrate
 import eventlog
 import geometry
 import response
-from config import CENTRAL_FIXATION, GENDER_OPTIONS, GEOMETRY, NAMES, SESSION, TIMING
+import trialdata
+from config import (CENTRAL_FIXATION, GENDER_OPTIONS, GEOMETRY, NAMES,
+                    OBJECTS, SESSION, TIMING)
 from presentation import Presentation, QuitRequested, check_quit
 
 
@@ -54,7 +57,13 @@ def run_trial(pres, target, trial_n):
     flip that shows it, so the marker lands as close as possible to the
     moment the screen changed.
     """
+    times = {}
+
     def mark(event, **fields):
+        # The PsychoPy time is taken at the same moment the marker is sent,
+        # so the trial file and the tracker file can be checked against
+        # each other.
+        times[trialdata.EVENT_TIMES[event]] = core.getTime()
         eventlog.mark(event, trial=trial_n, **fields)
 
     if GEOMETRY['randomRotation']:
@@ -79,8 +88,8 @@ def run_trial(pres, target, trial_n):
     mark("objects_on")
     # Gaze must stay on the dot, unbroken, for a random time before the
     # name appears; the random length keeps the name from being anticipated.
-    response.wait_for_central_fixation(
-        pres, random.uniform(*TIMING['previewDurRange']), positions)
+    preview_s = random.uniform(*TIMING['previewDurRange'])
+    response.wait_for_central_fixation(pres, preview_s, positions)
 
     # --- 3. cue and response ---------------------------------------------
     responder = response.GazeDwellResponder(positions, pres.ring_order)
@@ -120,23 +129,46 @@ def run_trial(pres, target, trial_n):
     mark("blank_on")
     core.wait(TIMING['iti'])
 
-    return {
+    if outcome is None:
+        result = "timeout"
+    elif selection == target:
+        result = "correct"
+    else:
+        result = "incorrect"
+
+    # None is written as an empty cell.
+    row = {
+        "trialN": trial_n,
         "target": target,
-        "cue": NAMES[target],
-        "selection": None if outcome is None else outcome["selection"],
-        "correct": outcome is not None and outcome["selection"] == target,
-        "selection_ms": None if outcome is None else outcome["selection_ms"],
+        "name": NAMES[target],
+        "targetImage": OBJECTS[target],
         "rotation_deg": rotation,
     }
+    for obj in NAMES:
+        x, y = positions[pres.ring_order.index(obj)]
+        row[f"{obj}X"] = round(x, 1)
+        row[f"{obj}Y"] = round(y, 1)
+    row.update({
+        "previewDur_s": preview_s,
+        "selection": selection,
+        "outcome": result,
+        "selection_ms": None if outcome is None else outcome["selection_ms"],
+        "firstMove_ms": None if outcome is None else outcome["first_move_ms"],
+    })
+    row.update(times)
+    return row
 
 
 def main():
     geometry.check_tolerance()        # fail before anything opens
     pres = Presentation()
+    refresh_rate = pres.win.getActualFrameRate()   # None if it was unstable
 
     LiveTrack.Init()
     LiveTrack.SetResultsTypeRaw()     # calibration reads pupil/glint vectors
     LiveTrack.StartTracking()
+    tracker_rate = LiveTrack.GetCaptureConfig()[2]
+    tracked_eyes = LiveTrack.GetTracking()          # (left, right)
 
     results = []
     accuracy = {}                     # stays empty if calibration is skipped
@@ -175,6 +207,12 @@ def main():
         LiveTrack.StartTracking()
         print(f"Recording to {path}")
 
+        session = trialdata.session_columns(
+            participant, accuracy, path,
+            datetime.now().isoformat(timespec="seconds"),
+            refresh_rate, tracker_rate, tracked_eyes, pres.ring_order)
+        print(f"Trials to {trialdata.open_file(path, session)}")
+
         eventlog.mark("session_start", participant=pid,
                       ring_order="|".join(pres.ring_order))
         for eye, entry in accuracy.items():
@@ -187,7 +225,9 @@ def main():
                           "keep looking at it until the screen changes.\n\n"
                           "Press space to start. Press Esc to end the session.")
         for trial_n, target in enumerate(pres.ring_order, start=1):
-            results.append(run_trial(pres, target, trial_n))
+            row = run_trial(pres, target, trial_n)
+            trialdata.write_row(session, row)
+            results.append(row)
         eventlog.mark("session_end")
     except response.FixationTimeout as e:
         eventlog.mark("session_aborted", reason="fixation_timeout")
@@ -198,6 +238,7 @@ def main():
         eventlog.mark("session_aborted", reason="escape")
         print("\nStopped by the experimenter.")
     finally:
+        trialdata.close_file()
         eventlog.close_session()
         LiveTrack.StopTracking()
         LiveTrack.ClearDataBuffer()
@@ -206,7 +247,7 @@ def main():
 
     print(participant)
     for r in results:
-        print(r)
+        print(r["trialN"], r["target"], r["outcome"], r["selection_ms"])
 
 
 if __name__ == "__main__":

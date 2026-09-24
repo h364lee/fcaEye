@@ -2,8 +2,8 @@
 Keep all variables here - 2026-09-12
 """
 SESSION = {
-    "yesDemographics": False,     # False: skip the questions, ID becomes "debug"
-    "yesCalibration": False,      # False: use the calibration stored in the tracker
+    "yesDemographics": True,     # False: skip the questions, ID becomes "debug"
+    "yesCalibration": True,      # False: use the calibration stored in the tracker
 }
 
 GENDER_OPTIONS = [
