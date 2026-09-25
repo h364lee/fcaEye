@@ -13,32 +13,38 @@ import LiveTrack
 from psychopy import core
 
 import calibrate
+import design
 import eventlog
 import geometry
 import response
 import trialdata
 from config import (CENTRAL_FIXATION, GENDER_OPTIONS, GEOMETRY, NAMES,
-                    OBJECTS, SESSION, TIMING)
+                    SESSION, TIMING)
 from presentation import Presentation, QuitRequested, check_quit
 
 
 def ask_demographics(pres):
     """Ask SONA ID, age and gender on the experiment screen."""
     digits = "0123456789"
-    sona_id = pres.type_answer("SONA ID", digits)
-    age = pres.type_answer("Age", digits)
-    gender = pres.choose_option("Gender", GENDER_OPTIONS)
+    sona_id = pres.type_answer("What is your SONA ID?", digits,
+                               "Question 1 of 3", "6 digits", max_len=6,
+                               is_valid=lambda a: len(a) == 6)
+    age = pres.type_answer("What is your age?", digits,
+                           "Question 2 of 3", "In years, 1 to 99", max_len=2,
+                           is_valid=lambda a: 1 <= int(a) <= 99)
+    gender = pres.choose_option("What is your gender?", GENDER_OPTIONS,
+                                "Question 3 of 3")
 
-    self_describe = ""
+    # One gender column: a self-description replaces the option text,
+    # marked so it can be told apart from the fixed options.
     if gender == "Prefer to self-describe":
-        self_describe = pres.type_answer("Please describe your gender",
-                                         "abcdefghijklmnopqrstuvwxyz -")
-    return {
-        "sonaID": sona_id,
-        "age": int(age),
-        "gender": gender,
-        "genderSelfDescribe": self_describe,
-    }
+        letters = "abcdefghijklmnopqrstuvwxyz"
+        typed = pres.type_answer("Please describe your gender",
+                                 letters + letters.upper() + " -",
+                                 "Question 3 of 3",
+                                 "Letters, spaces and hyphens", max_len=24)
+        gender = f"self-described: {typed}"
+    return {"sonaID": sona_id, "age": int(age), "gender": gender}
 
 
 def run_trial(pres, target, trial_n):
@@ -75,7 +81,7 @@ def run_trial(pres, target, trial_n):
     # --- 1. central fixation ---------------------------------------------
     pres.draw_fixation()
     pres.flip()
-    mark("dot_on", target=target, cue=NAMES[target],
+    mark("dot_on", target=target, name=NAMES[target],
          rotation_deg=f"{rotation:.2f}")
     response.wait_for_central_fixation(pres, CENTRAL_FIXATION['centralHold_ms'] / 1000)
     mark("fixation_held")
@@ -97,7 +103,7 @@ def run_trial(pres, target, trial_n):
     pres.draw_array(positions)
     pres.draw_cue(target)
     pres.flip()
-    mark("cue_on")
+    mark("name_on")
     responder.start()
 
     # Redraw every frame: flipping advances the frame, and the responder
@@ -139,9 +145,9 @@ def run_trial(pres, target, trial_n):
     # None is written as an empty cell.
     row = {
         "trialN": trial_n,
-        "target": target,
+        "targetObj": target,
         "name": NAMES[target],
-        "targetImage": OBJECTS[target],
+        "targetImage": design.image_code(target),
         "rotation_deg": rotation,
     }
     for obj in NAMES:
@@ -150,7 +156,7 @@ def run_trial(pres, target, trial_n):
         row[f"{obj}Y"] = round(y, 1)
     row.update({
         "previewDur_s": preview_s,
-        "selection": selection,
+        "selected": selection,
         "outcome": result,
         "selection_ms": None if outcome is None else outcome["selection_ms"],
         "firstMove_ms": None if outcome is None else outcome["first_move_ms"],
@@ -161,8 +167,9 @@ def run_trial(pres, target, trial_n):
 
 def main():
     geometry.check_tolerance()        # fail before anything opens
+    design.check_design()
     pres = Presentation()
-    refresh_rate = pres.win.getActualFrameRate()   # None if it was unstable
+    screen_rate = pres.win.getActualFrameRate()    # None if it was unstable
 
     LiveTrack.Init()
     LiveTrack.SetResultsTypeRaw()     # calibration reads pupil/glint vectors
@@ -172,14 +179,16 @@ def main():
 
     results = []
     accuracy = {}                     # stays empty if calibration is skipped
-    participant = {"sonaID": "debug", "age": "", "gender": "",
-                   "genderSelfDescribe": ""}
+    participant = {"sonaID": "debug", "age": "", "gender": ""}
     try:
         # Inside the try, so Esc during the questions still closes the
         # window and the tracker.
         if SESSION["yesDemographics"]:
             participant = ask_demographics(pres)
         pid = participant["sonaID"]
+
+        # From here on the cursor must not be on the stimulus screen.
+        pres.park_mouse()
 
         if SESSION["yesCalibration"]:
             pres.show_message("Look at each dot until it "
@@ -207,10 +216,15 @@ def main():
         LiveTrack.StartTracking()
         print(f"Recording to {path}")
 
+        # About 0.4 s after recording starts, the tracker resets its own
+        # clock once (seen in CRS's demo files too). Waiting past that point
+        # puts every marker after the reset.
+        core.wait(0.5)
+
         session = trialdata.session_columns(
-            participant, accuracy, path,
+            participant, accuracy,
             datetime.now().isoformat(timespec="seconds"),
-            refresh_rate, tracker_rate, tracked_eyes, pres.ring_order)
+            screen_rate, tracker_rate, tracked_eyes, pres.ring_order)
         print(f"Trials to {trialdata.open_file(path, session)}")
 
         eventlog.mark("session_start", participant=pid,
@@ -247,7 +261,7 @@ def main():
 
     print(participant)
     for r in results:
-        print(r["trialN"], r["target"], r["outcome"], r["selection_ms"])
+        print(r["trialN"], r["targetObj"], r["outcome"], r["selection_ms"])
 
 
 if __name__ == "__main__":

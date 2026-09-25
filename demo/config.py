@@ -41,21 +41,40 @@ TIMING = {
     "responseTimeout_s": 5.0,         # no selection by then -> trial ends as a timeout
 }
 
-NAMES = {
-    "g1": "Bala",
-    "g2": "Kopo", 
-    "g3": "Vemi", 
-    "g4": "Zudo", 
-    "g5": "Tora"
+# ======================================================================
+# COUNTERBALANCING -- change values here only.
+# The image each object shows is worked out from CONTEXT and ATTRIBUTES
+# (design.py), so it is never typed by hand.
+# ======================================================================
+
+# Formal context: which attributes (m1 m2 m3) each object has.
+# Provisional: these rows reproduce the five images used so far.
+CONTEXT = {
+    "g1": [1, 1, 0],
+    "g2": [1, 1, 1],
+    "g3": [1, 0, 0],
+    "g4": [1, 0, 1],
+    "g5": [0, 1, 0],
 }
 
-OBJECTS = {
-    "g1": "big_black_square.png",
-    "g2": "big_black_tri.png",
-    "g3": "big_white_square.png",
-    "g4": "big_white_tri.png",
-    "g5": "small_black_square.png",
+# Which visual feature stands for each attribute, and which of its levels
+# means the object has the attribute (1) or does not (0).
+ATTRIBUTES = {
+    "m1": {"feature": "size", 1: "big", 0: "small"},
+    "m2": {"feature": "colour", 1: "black", 0: "white"},
+    "m3": {"feature": "shape", 1: "tri", 0: "square"},
 }
+
+# The made-up word taught for each object.
+NAMES = {
+    "g1": "Bala",
+    "g2": "Kopo",
+    "g3": "Vemi",
+    "g4": "Zudo",
+    "g5": "Tora",
+}
+
+# ======================================================================
 
 
 from pathlib import Path
@@ -66,6 +85,10 @@ PATHS = {
     "stimDir": PROJECT_DIR / "stimObj",
     "dataDir": PROJECT_DIR / "data",
 }
+
+# Order of the feature words in the image file names, as objectGen.py
+# writes them: <size>_<colour>_<shape>.png
+IMAGE_NAME_ORDER = ["size", "colour", "shape"]
 
 CALIBRATION = {
 # matched CRS LiveTrack calibrate.py 2026-09-14

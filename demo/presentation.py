@@ -1,10 +1,21 @@
-from psychopy import event, visual
+import sys
 
-from config import DISPLAY, GEOMETRY, NAMES, OBJECTS, PATHS
+from psychopy import core, event, visual
+
+import design
+from config import CONTEXT, DISPLAY, GEOMETRY, NAMES, PATHS
 
 # Key names that do not equal the character they type.
 KEY_CHARS = {"space": " ", "minus": "-"}
 KEY_CHARS.update({f"num_{d}": str(d) for d in range(10)})
+
+# Question screens. PsychoPy colours run from -1 (black) to 1 (white);
+# 0 is the mid-grey background.
+DIM_TEXT = [0.6, 0.6, 0.6]
+BOX_FILL = [-0.2, -0.2, -0.2]
+OPTION_FILL = [-0.3, -0.3, -0.3]
+CHOSEN_FILL = [-0.45, -0.1, -0.45]
+CHOSEN_LINE = [-0.05, 0.75, -0.05]
 
 
 class QuitRequested(Exception):
@@ -91,12 +102,12 @@ class Presentation:
 
     def load_objects(self):
         """
-        Load the image file listed in config.OBJECTS for each object.
+        Load each object's image, as worked out by design.object_image.
         output: {object_name: ImageStim}
         """
         stims = {}
-        for name, file_name in OBJECTS.items():
-            file_path = PATHS['stimDir'] / file_name
+        for name in CONTEXT:
+            file_path = PATHS['stimDir'] / design.object_image(name)
             stims[name] = visual.ImageStim(self.win, image=str(file_path),
                                            size=GEOMETRY['objSize_px'])
         return stims
@@ -168,47 +179,126 @@ class Presentation:
             raise QuitRequested("escape pressed")
         return pressed[0]
 
-    def type_answer(self, question, allowed):
-        """Show a question and let the participant type the answer on screen.
+    def _label(self, text, y, height, color="white", bold=False, x=0,
+               align="center"):
+        """A text line for the question screens."""
+        return visual.TextStim(self.win, text=text, pos=(x, y), height=height,
+                               color=color, bold=bold, wrapWidth=900,
+                               anchorHoriz=align, alignText=align)
 
-        Only characters in `allowed` are added. Backspace deletes one
-        character; Enter confirms, but only once something has been typed.
-        Letters are typed in lower case.
+    def type_answer(self, question, allowed, progress, hint, max_len=20,
+                    is_valid=None):
+        """One question with a typing box; returns what was typed.
+
+        Only characters in `allowed` are added, up to max_len. Backspace
+        deletes one character. Enter confirms once something is typed and,
+        if is_valid is given, is_valid(answer) is True; otherwise Enter is
+        ignored and the hint line states the rule.
+        A letter is upper case when Shift or Caps Lock is on (not both).
         """
+        labels = [self._label(progress, 234, 18, DIM_TEXT),
+                  self._label(question, 124, 34, bold=True),
+                  self._label(hint, -86, 18, DIM_TEXT),
+                  self._label("Press Enter to continue", -256, 20, DIM_TEXT)]
+        box = visual.Rect(self.win, width=400, height=70, pos=(0, 19),
+                          fillColor=BOX_FILL, lineColor="white", lineWidth=2)
+        typed = self._label("", 19, 30, x=-180, align="left")
+
         answer = ""
         event.clearEvents()
         while True:
-            self.message.text = (f"{question}\n\n{answer}_\n\n"
-                                 "(Enter to confirm, Backspace to delete)")
-            self.message.draw()
+            box.draw()
+            typed.text = answer + "|"        # "|" marks where typing goes
+            typed.draw()
+            for label in labels:
+                label.draw()
             self.flip()
 
-            for key in event.getKeys():
+            for key, mods in event.getKeys(modifiers=True):
                 if key == "escape":
                     raise QuitRequested("escape pressed")
                 if key in ("return", "num_enter") and answer:
-                    return answer
-                char = KEY_CHARS.get(key, key)
+                    if is_valid is None or is_valid(answer):
+                        return answer
+                    continue
                 if key == "backspace":
                     answer = answer[:-1]
-                elif len(char) == 1 and char in allowed:
+                    continue
+                char = KEY_CHARS.get(key, key)
+                if len(char) != 1:
+                    continue                 # Shift, Tab, arrows, ...
+                if char.isalpha() and mods.get("shift") != mods.get("capslock"):
+                    char = char.upper()
+                if char in allowed and len(answer) < max_len:
                     answer += char
 
-    def choose_option(self, question, options):
-        """Show numbered options and return the one whose number is pressed."""
-        numbers = [str(i) for i in range(1, len(options) + 1)]
-        lines = [f"{n}. {option}" for n, option in zip(numbers, options)]
-        self.message.text = (question + "\n\n" + "\n".join(lines)
-                             + "\n\n(Press the number)")
-        self.message.draw()
-        self.flip()
+    def choose_option(self, question, options, progress):
+        """Options in stacked boxes; returns the one pressed or clicked.
 
+        Chosen by its number key or by a mouse click. The chosen box turns
+        green for 0.3 s so the participant sees what was recorded.
+        """
+        labels = [self._label(progress, 264, 18, DIM_TEXT),
+                  self._label(question, 184, 34, bold=True),
+                  self._label("Press a number or click an option", -296, 20,
+                              DIM_TEXT)]
+        boxes = []
+        for i, option in enumerate(options):
+            y = 87 - 70 * i
+            boxes.append(visual.Rect(self.win, width=460, height=55, pos=(0, y),
+                                     fillColor=OPTION_FILL, lineColor="white",
+                                     lineWidth=1))
+            labels.append(self._label(str(i + 1), y, 22, DIM_TEXT, bold=True,
+                                      x=-205, align="left"))
+            labels.append(self._label(option, y, 24, x=-165, align="left"))
+
+        numbers = [str(i) for i in range(1, len(options) + 1)]
+        mouse = event.Mouse(win=self.win, visible=True)
+        self.win.mouseVisible = True
         event.clearEvents()
-        pressed = event.waitKeys(keyList=numbers + [f"num_{n}" for n in numbers]
-                                 + ["escape"])
-        if pressed[0] == "escape":
-            raise QuitRequested("escape pressed")
-        return options[int(pressed[0].replace("num_", "")) - 1]
+
+        choice = None
+        while choice is None:
+            for box in boxes:
+                box.draw()
+            for label in labels:
+                label.draw()
+            self.flip()
+
+            for key in event.getKeys(keyList=numbers + ["num_" + n for n in numbers]
+                                     + ["escape"]):
+                if key == "escape":
+                    raise QuitRequested("escape pressed")
+                choice = int(key.replace("num_", "")) - 1
+            for i, box in enumerate(boxes):
+                if mouse.isPressedIn(box, buttons=[0]):
+                    choice = i
+
+        boxes[choice].fillColor = CHOSEN_FILL
+        boxes[choice].lineColor = CHOSEN_LINE
+        boxes[choice].lineWidth = 3
+        for box in boxes:
+            box.draw()
+        for label in labels:
+            label.draw()
+        self.flip()
+        core.wait(0.3)
+        return options[choice]
+
+    def park_mouse(self):
+        """Hide the cursor and move it to the experimenter's screen.
+
+        Moving it off the stimulus screen keeps it from sitting on the
+        stimuli, even if the window shows it again. Screen 0 (the primary
+        monitor) starts at (0, 0) in Windows' desktop coordinates, so its
+        centre is half its width and half its height.
+        """
+        self.win.mouseVisible = False
+        if sys.platform == "win32":
+            import ctypes
+            user32 = ctypes.windll.user32
+            user32.SetCursorPos(user32.GetSystemMetrics(0) // 2,
+                                user32.GetSystemMetrics(1) // 2)
 
     def close(self):
         """close the window

@@ -1,7 +1,7 @@
 """Event markers in the data file.
 
 Comment format, one event per comment:
-    event=cue_on trial=3 target=g2
+    event=name_on trial=3
 """
 
 import contextlib
@@ -16,6 +16,15 @@ import LiveTrack
 from config import PATHS
 
 _open = False
+_last_sent = 0.0
+
+# The tracker keeps one waiting comment and writes it on its next sample
+# (every 2 ms). A second comment sent before that sample replaces the first,
+# and the call still reports success. So markers are kept at least this far
+# apart. Trial markers are always further apart (a screen flip lies between
+# them), so in practice only back-to-back markers such as the two
+# calibration markers are delayed.
+MIN_GAP_S = 0.004
 
 
 def open_session(participant_id):
@@ -55,10 +64,17 @@ def mark(event, **fields):
     if "," in text:
         raise ValueError(f"comma in event marker: {text!r}")
 
+    # Busy-wait rather than sleep: on Windows, sleep can overshoot by
+    # several milliseconds.
+    global _last_sent
+    while time.perf_counter() - _last_sent < MIN_GAP_S:
+        pass
+
     # The binding prints a success line on every call; at eight events a
     # trial that buries real messages. Silence it and check the result.
     with contextlib.redirect_stdout(io.StringIO()):
         result = LiveTrack.SetDataComment(text)
+    _last_sent = time.perf_counter()
     if result != 0:
         print(f"WARNING: event marker not written: {text}")
 
