@@ -102,6 +102,26 @@ def fit_clock(samples, trials):
     return offset, rate, residual_ms
 
 
+def check_lag(samples, trials):
+    """How far GetLastResult's timestamp trails the marker, per event (ms).
+
+    The marker lands on the tracker's next sample after it is sent; the
+    GetLastResult timestamp is the newest sample that had reached the PC at
+    that moment. The difference is the transfer delay plus up to one sample.
+    Returns an empty list for sessions recorded before these columns existed.
+    """
+    lags = []
+    for _, row in samples[samples["Comment"].str.contains("trial=")].iterrows():
+        event = row["Comment"].split()[0].removeprefix("event=")
+        column = EVENT_TIMES[event].removesuffix("_s") + "Tracker_us"
+        if column not in trials.columns:
+            return []
+        match = trials.loc[trials["trialN"] == row["trialN"], column]
+        if len(match) and pd.notna(match.iloc[0]):
+            lags.append((row["Timestamp"] - match.iloc[0]) / 1000)
+    return lags
+
+
 def merge(trials_path):
     trials_path = Path(trials_path)
     stem = trials_path.name.removesuffix("_trials.csv")
@@ -120,8 +140,10 @@ def merge(trials_path):
 
     # Session and settings columns are the same on every trial row, so
     # they go on every sample, including those outside trials.
-    trial_columns = trials.columns[trials.columns.get_loc("trialN"):
-                                   trials.columns.get_loc("blankOn_s") + 1]
+    # Trial columns run from trialN up to the first settings column; the
+    # settings are the columns named "GROUP.key".
+    first_setting = next(i for i, c in enumerate(trials.columns) if "." in c)
+    trial_columns = trials.columns[trials.columns.get_loc("trialN"):first_setting]
     session_columns = [c for c in trials.columns if c not in trial_columns]
     merged = samples.merge(trials[list(trial_columns)], on="trialN", how="left")
     for column in session_columns:
@@ -137,6 +159,11 @@ def merge(trials_path):
           f"(drift {(rate - 1) * 1e6:.1f} ppm)")
     print(f"fit:      {len(residual_ms)} events, residual sd "
           f"{residual_ms.std():.2f} ms, largest {abs(residual_ms).max():.2f} ms")
+    lags = check_lag(samples, trials)
+    if lags:
+        print(f"lag:      GetLastResult trails the marker by median "
+              f"{np.median(lags):.2f} ms (range {min(lags):.2f} to "
+              f"{max(lags):.2f} ms, {len(lags)} events)")
     print(f"written:  {out_path}")
     return out_path
 

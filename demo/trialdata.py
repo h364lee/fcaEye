@@ -33,6 +33,11 @@ EVENT_TIMES = {
     "blank_on": "blankOn_s",
 }
 
+
+def tracker_column(column):
+    """Tracker-clock twin of an event column: "nameOn_s" -> "nameOnTracker_us"."""
+    return column.removesuffix("_s") + "Tracker_us"
+
 _file = None
 _writer = None
 _settings = None
@@ -77,7 +82,9 @@ def trial_column_names():
         names += [f"{obj}X", f"{obj}Y"]
     names += ["previewDur_s", "selected", "outcome", "selection_ms",
               "firstMove_ms"]
-    names += list(dict.fromkeys(EVENT_TIMES.values()))   # unique, in order
+    event_columns = list(dict.fromkeys(EVENT_TIMES.values()))   # unique, in order
+    names += event_columns
+    names += [tracker_column(c) for c in event_columns]
     return names
 
 

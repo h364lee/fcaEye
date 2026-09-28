@@ -48,6 +48,17 @@ def open_session(participant_id):
     return path
 
 
+def tracker_time_us():
+    """Tracker timestamp (us) of the newest sample that has reached the PC.
+
+    Taken right after a screen change, it places the change on the
+    tracker's clock without depending on a marker. It trails the true
+    moment by the transfer delay from the tracker; merge.py measures that
+    delay by comparing it with the marker's sample.
+    """
+    return LiveTrack.GetLastResult().Timestamp
+
+
 def mark(event, **fields):
     """Write one event marker. Does nothing if no session is open.
 

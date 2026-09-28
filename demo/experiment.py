@@ -66,10 +66,12 @@ def run_trial(pres, target, trial_n):
     times = {}
 
     def mark(event, **fields):
-        # The PsychoPy time is taken at the same moment the marker is sent,
-        # so the trial file and the tracker file can be checked against
-        # each other.
-        times[trialdata.EVENT_TIMES[event]] = core.getTime()
+        # Each event gets three times, all taken right after its flip:
+        # the PsychoPy time, the tracker time from GetLastResult, and the
+        # marker in the tracker file. The first two go in the trial file.
+        column = trialdata.EVENT_TIMES[event]
+        times[column] = core.getTime()
+        times[trialdata.tracker_column(column)] = eventlog.tracker_time_us()
         eventlog.mark(event, trial=trial_n, **fields)
 
     if GEOMETRY['randomRotation']:
