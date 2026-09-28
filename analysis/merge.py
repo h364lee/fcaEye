@@ -3,6 +3,7 @@
     cd analysis
     python merge.py                                        # newest session in data/
     python merge.py ../data/877787_20260925_132503_trials.csv
+    python merge.py 000001 877787                          # every session of these SONA IDs
 
 Output, next to the two inputs:
     <id>_<date>_<time>_merged.csv    one row per tracker sample (every 2 ms)
@@ -92,9 +93,10 @@ def fit_clock(samples, trials):
     for _, row in marked.iterrows():
         event = row["Comment"].split()[0].removeprefix("event=")
         match = trials.loc[trials["trialN"] == row["trialN"], EVENT_TIMES[event]]
-        if len(match) and pd.notna(match.iloc[0]):
+        value = pd.to_numeric(match, errors="coerce")
+        if len(value) and pd.notna(value.iloc[0]):
             tracker_s.append(row["Timestamp"] / 1e6)
-            psychopy_s.append(match.iloc[0])
+            psychopy_s.append(value.iloc[0])
 
     tracker_s, psychopy_s = np.array(tracker_s), np.array(psychopy_s)
     rate, offset = np.polyfit(tracker_s, psychopy_s, 1)
@@ -117,8 +119,9 @@ def check_lag(samples, trials):
         if column not in trials.columns:
             return []
         match = trials.loc[trials["trialN"] == row["trialN"], column]
-        if len(match) and pd.notna(match.iloc[0]):
-            lags.append((row["Timestamp"] - match.iloc[0]) / 1000)
+        value = pd.to_numeric(match, errors="coerce")
+        if len(value) and pd.notna(value.iloc[0]):
+            lags.append((row["Timestamp"] - value.iloc[0]) / 1000)
     return lags
 
 
@@ -128,10 +131,12 @@ def merge(trials_path):
     tracker_path = trials_path.with_name(stem + ".csv")
     out_path = trials_path.with_name(stem + "_merged.csv")
 
-    # Read the image codes as text, so "0 1 0" is kept as written.
-    trials = pd.read_csv(trials_path, dtype={c: str for c in
-                         pd.read_csv(trials_path, nrows=0).columns
-                         if c.endswith("Image")})
+    # Every trial-file column is read as text, so values are copied exactly
+    # as written (e.g. SONA ID "000001", image code "0 1 0"). Only trialN,
+    # used for the join, is made a number; the time columns are converted
+    # where they are calculated with.
+    trials = pd.read_csv(trials_path, dtype=str, keep_default_na=False)
+    trials["trialN"] = trials["trialN"].astype("Int64")
     samples, dropped = read_tracker(tracker_path)
     samples = add_trial_and_phase(samples)
 
@@ -168,9 +173,41 @@ def merge(trials_path):
     return out_path
 
 
+def sessions_for(sona_id):
+    """Trial files of one participant: data/<sona_id>_<date>_<time>_trials.csv."""
+    return sorted(DATA_DIR.glob(f"{sona_id}_*_trials.csv"))
+
+
+def merge_if_new(trials_path):
+    """Merge one session, unless its merged file already exists.
+
+    To merge a session again, delete its _merged.csv first.
+    """
+    trials_path = Path(trials_path)
+    stem = trials_path.name.removesuffix("_trials.csv")
+    out_path = trials_path.with_name(stem + "_merged.csv")
+    if out_path.exists():
+        print(f"skipped:  {out_path.name} already exists")
+        return
+    merge(trials_path)
+    print()
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        merge(sys.argv[1])
-    else:
+    # Each argument is either a trial file path or a SONA ID.
+    # No argument: the newest session in data/.
+    arguments = sys.argv[1:]
+    if not arguments:
         newest = max(DATA_DIR.glob("*_trials.csv"), key=lambda p: p.stat().st_mtime)
-        merge(newest)
+        arguments = [str(newest)]
+
+    for argument in arguments:
+        if argument.endswith(".csv"):
+            merge_if_new(argument)
+            continue
+        found = sessions_for(argument)
+        if not found:
+            known = sorted({p.name.split("_")[0] for p in DATA_DIR.glob("*_trials.csv")})
+            print(f"no sessions for SONA ID {argument}; IDs in data/: {', '.join(known)}")
+        for trials_path in found:
+            merge_if_new(trials_path)

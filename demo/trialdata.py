@@ -1,13 +1,10 @@
-"""Trial data file: one row per trial, with the session values repeated on
-every row, so that one file is enough for analysis.
-
-The file sits next to the tracker's file and shares its name:
+"""Trial data file
     data/<id>_<date>_<time>.csv          tracker samples and event markers
     data/<id>_<date>_<time>_trials.csv   this file
 
 Column order: participant, session, mappings, trial, event times, settings.
 
-Each row is written and flushed as soon as its trial ends, so a crash loses
+Each row is written as soon as its trial ends, so a crash loses
 at most the trial that was running.
 """
 
@@ -35,7 +32,7 @@ EVENT_TIMES = {
 
 
 def tracker_column(column):
-    """Tracker-clock twin of an event column: "nameOn_s" -> "nameOnTracker_us"."""
+    """Tracker-clock of an event column: "nameOn_s" -> "nameOnTracker_us"."""
     return column.removesuffix("_s") + "Tracker_us"
 
 _file = None

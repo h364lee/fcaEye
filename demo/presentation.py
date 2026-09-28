@@ -90,10 +90,24 @@ class Presentation:
             lineWidth=5,
         )
 
+        # feedback X over a wrong choice: two crossing lines whose ends
+        # touch the feedback circle's edge, so both marks are the same size
+        arm = GEOMETRY['feedbackCircleRadius_px'] / 2 ** 0.5
+        self.wrong_mark = [
+            visual.Line(self.win, start=(-arm, -arm), end=(arm, arm),
+                        lineColor="red", lineWidth=5),
+            visual.Line(self.win, start=(-arm, arm), end=(arm, -arm),
+                        lineColor="red", lineWidth=5),
+        ]
+
         # feedback name text, placed under the correct object
         self.feedback_name = visual.TextStim(
             self.win, text="", height=GEOMETRY['feedbackNameHeight_px'], color="white"
         )
+
+        if GEOMETRY['feedbackWrongMark'] not in ("x", "circle"):
+            raise ValueError("GEOMETRY['feedbackWrongMark'] must be \"x\" or "
+                             f"\"circle\"; it is {GEOMETRY['feedbackWrongMark']!r}")
 
         # load object images & decide ring order
         self.stims = self.load_objects()
@@ -136,7 +150,8 @@ class Presentation:
 
         correct:   correct object, its name under it, green circle around it
         incorrect: correct object with its name under it, and the chosen
-                   object with a red circle around it
+                   object with a red X over it or a red circle around it
+                   (GEOMETRY['feedbackWrongMark'])
         timeout:   correct object with its name under it, no circle
         """
         correct_pos = positions[self.ring_order.index(target)]
@@ -158,9 +173,14 @@ class Presentation:
             selected_stim = self.stims[selection]
             selected_stim.pos = selected_pos
             selected_stim.draw()
-            self.highlight.lineColor = 'red'
-            self.highlight.pos = selected_pos
-            self.highlight.draw()
+            if GEOMETRY['feedbackWrongMark'] == "x":
+                for line in self.wrong_mark:
+                    line.pos = selected_pos
+                    line.draw()
+            else:
+                self.highlight.lineColor = 'red'
+                self.highlight.pos = selected_pos
+                self.highlight.draw()
 
     def flip(self):
         """ just flip() - update the screen
@@ -186,7 +206,7 @@ class Presentation:
                                color=color, bold=bold, wrapWidth=900,
                                anchorHoriz=align, alignText=align)
 
-    def type_answer(self, question, allowed, progress, hint, max_len=20,
+    def type_answer(self, question, allowed, progress="", hint="", max_len=20,
                     is_valid=None):
         """One question with a typing box; returns what was typed.
 
@@ -196,10 +216,12 @@ class Presentation:
         ignored and the hint line states the rule.
         A letter is upper case when Shift or Caps Lock is on (not both).
         """
-        labels = [self._label(progress, 234, 18, DIM_TEXT),
-                  self._label(question, 124, 34, bold=True),
-                  self._label(hint, -86, 18, DIM_TEXT),
+        labels = [self._label(question, 124, 34, bold=True),
                   self._label("Press Enter to continue", -256, 20, DIM_TEXT)]
+        if progress:
+            labels.append(self._label(progress, 234, 18, DIM_TEXT))
+        if hint:
+            labels.append(self._label(hint, -86, 18, DIM_TEXT))
         box = visual.Rect(self.win, width=400, height=70, pos=(0, 19),
                           fillColor=BOX_FILL, lineColor="white", lineWidth=2)
         typed = self._label("", 19, 30, x=-180, align="left")
@@ -232,16 +254,17 @@ class Presentation:
                 if char in allowed and len(answer) < max_len:
                     answer += char
 
-    def choose_option(self, question, options, progress):
+    def choose_option(self, question, options, progress=""):
         """Options in stacked boxes; returns the one pressed or clicked.
 
         Chosen by its number key or by a mouse click. The chosen box turns
         green for 0.3 s so the participant sees what was recorded.
         """
-        labels = [self._label(progress, 264, 18, DIM_TEXT),
-                  self._label(question, 184, 34, bold=True),
+        labels = [self._label(question, 184, 34, bold=True),
                   self._label("Press a number or click an option", -296, 20,
                               DIM_TEXT)]
+        if progress:
+            labels.append(self._label(progress, 264, 18, DIM_TEXT))
         boxes = []
         for i, option in enumerate(options):
             y = 87 - 70 * i

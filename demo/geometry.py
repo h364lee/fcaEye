@@ -2,6 +2,7 @@
 """
 
 import math
+import random
 
 from config import CALIBRATION, DISPLAY, GEOMETRY
 
@@ -17,6 +18,23 @@ def px_per_deg():
     px_per_mm = DISPLAY['size'][0] / CALIBRATION['screenSize_mm'][0]
     mm_per_deg = math.tan(math.radians(1)) * CALIBRATION['viewDist_mm']
     return mm_per_deg * px_per_mm
+
+
+def ring_rotation():
+    """Ring rotation in degrees for one trial, from GEOMETRY['ringRotation'].
+
+    A number is used as given (0 = first slot at 3 o'clock; positive turns
+    the ring counter-clockwise). "random" draws a new rotation each trial
+    between 0 and the angle between two slots; larger rotations would only
+    repeat the same layouts.
+    """
+    value = GEOMETRY['ringRotation']
+    if value == "random":
+        return random.uniform(0, 360 / GEOMETRY['objCount'])
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    raise ValueError(f"GEOMETRY['ringRotation'] must be a number of degrees "
+                     f"or \"random\"; it is {value!r}")
 
 
 def ring_positions(rotation_deg):

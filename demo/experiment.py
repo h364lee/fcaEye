@@ -18,8 +18,7 @@ import eventlog
 import geometry
 import response
 import trialdata
-from config import (CENTRAL_FIXATION, GENDER_OPTIONS, GEOMETRY, NAMES,
-                    SESSION, TIMING)
+from config import CENTRAL_FIXATION, GENDER_OPTIONS, NAMES, SESSION, TIMING
 from presentation import Presentation, QuitRequested, check_quit
 
 
@@ -27,21 +26,17 @@ def ask_demographics(pres):
     """Ask SONA ID, age and gender on the experiment screen."""
     digits = "0123456789"
     sona_id = pres.type_answer("What is your SONA ID?", digits,
-                               "Question 1 of 3", "6 digits", max_len=6,
+                               hint="6 digits", max_len=6,
                                is_valid=lambda a: len(a) == 6)
     age = pres.type_answer("What is your age?", digits,
-                           "Question 2 of 3", "In years, 1 to 99", max_len=2,
+                           hint="1 to 99", max_len=2,
                            is_valid=lambda a: 1 <= int(a) <= 99)
-    gender = pres.choose_option("What is your gender?", GENDER_OPTIONS,
-                                "Question 3 of 3")
+    gender = pres.choose_option("What is your gender?", GENDER_OPTIONS)
 
-    # One gender column: a self-description replaces the option text,
-    # marked so it can be told apart from the fixed options.
     if gender == "Prefer to self-describe":
         letters = "abcdefghijklmnopqrstuvwxyz"
         typed = pres.type_answer("Please describe your gender",
                                  letters + letters.upper() + " -",
-                                 "Question 3 of 3",
                                  "Letters, spaces and hyphens", max_len=24)
         gender = f"self-described: {typed}"
     return {"sonaID": sona_id, "age": int(age), "gender": gender}
@@ -74,10 +69,7 @@ def run_trial(pres, target, trial_n):
         times[trialdata.tracker_column(column)] = eventlog.tracker_time_us()
         eventlog.mark(event, trial=trial_n, **fields)
 
-    if GEOMETRY['randomRotation']:
-        rotation = random.uniform(0, 360 / GEOMETRY['objCount'])
-    else:
-        rotation = 0.0
+    rotation = geometry.ring_rotation()
     positions = geometry.ring_positions(rotation)
 
     # --- 1. central fixation ---------------------------------------------
@@ -169,6 +161,7 @@ def run_trial(pres, target, trial_n):
 
 def main():
     geometry.check_tolerance()        # fail before anything opens
+    geometry.ring_rotation()          # stops here if the setting is invalid
     design.check_design()
     pres = Presentation()
     screen_rate = pres.win.getActualFrameRate()    # None if it was unstable
@@ -229,16 +222,17 @@ def main():
             screen_rate, tracker_rate, tracked_eyes, pres.ring_order)
         print(f"Trials to {trialdata.open_file(path, session)}")
 
+        # One marker for everything known at the start. Markers sent close
+        # together can collapse into one (seen with the two calibration
+        # markers), so these values share a single comment.
+        calibration = {f"cal_{eye}_deg": f"{entry['accuracy_deg']:.3f}"
+                       for eye, entry in accuracy.items()}
         eventlog.mark("session_start", participant=pid,
-                      ring_order="|".join(pres.ring_order))
-        for eye, entry in accuracy.items():
-            eventlog.mark("calibration", eye=eye,
-                          accuracy_deg=f"{entry['accuracy_deg']:.3f}",
-                          n_points=entry['n_points'])
+                      ring_order="|".join(pres.ring_order), **calibration)
 
         pres.show_message("Look at the central dot until a name appears.\n\n"
-                          "Then look at the object that name belongs to, and "
-                          "keep looking at it until the screen changes.\n\n"
+                          "Then look at the object that name belongs to, \n\n"
+                          "and keep looking at it to make your choice.\n\n"
                           "Press space to start. Press Esc to end the session.")
         for trial_n, target in enumerate(pres.ring_order, start=1):
             row = run_trial(pres, target, trial_n)
