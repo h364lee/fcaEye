@@ -15,7 +15,7 @@ import design
 from config import NAMES
 
 # Settings groups copied into the file, one column per key, as "GROUP.key".
-SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "DWELL_SELECTION",
+SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "ORDER", "DWELL_SELECTION",
             "CENTRAL_FIXATION", "CALIBRATION"]
 
 # Marker name -> column holding the PsychoPy time (s) the marker was written.

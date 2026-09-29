@@ -45,11 +45,11 @@ TIMING = {
 # COUNTERBALANCING
 
 CONTEXT = {
-    "g1": [1, 1, 0],
-    "g2": [1, 1, 1],
+    "g1": [1, 0, 0],
+    "g2": [1, 0, 0],
     "g3": [1, 0, 0],
-    "g4": [1, 0, 1],
-    "g5": [0, 1, 0],
+    "g4": [1, 0, 0],
+    "g5": [1, 0, 0],
 }
 
 # Which visual feature stands for each attribute, and what 0 and 1 mean
@@ -60,11 +60,21 @@ ATTRIBUTES = {
 }
 
 NAMES = {
-    "g1": "Bala",
-    "g2": "Kopo",
+    "g1": "Guli",
+    "g2": "Domu",
     "g3": "Vemi",
     "g4": "Zudo",
     "g5": "Tora",
+}
+
+# Where each object sits on the ring, and which object is the target on
+# each trial. Edit both lists before each session.
+ORDER = {
+    # Slot 1 is at 3 o'clock (before ringRotation); later slots go
+    # counter-clockwise. Each object exactly once.
+    "ringOrder": ["g1", "g2", "g3", "g4", "g5"],
+    # Target of trial 1, 2, 3, ... Any length; an object can repeat.
+    "trialOrder": ["g1", "g1", "g2", "g2", "g5"],
 }
 
 

@@ -1,6 +1,7 @@
 """experiment.py: session flow and trial flow.
 
-Session: demographics -> calibration -> recording -> one trial per object.
+Session: demographics -> calibration -> recording -> one trial per entry
+in config.ORDER['trialOrder'].
 Demographics and calibration can be switched off in config.SESSION.
 """
 
@@ -18,7 +19,7 @@ import eventlog
 import geometry
 import response
 import trialdata
-from config import CENTRAL_FIXATION, GENDER_OPTIONS, NAMES, SESSION, TIMING
+from config import CENTRAL_FIXATION, GENDER_OPTIONS, NAMES, ORDER, SESSION, TIMING
 from presentation import Presentation, QuitRequested, check_quit
 
 
@@ -37,7 +38,8 @@ def ask_demographics(pres):
         letters = "abcdefghijklmnopqrstuvwxyz"
         typed = pres.type_answer("Please describe your gender",
                                  letters + letters.upper() + " -",
-                                 "Letters, spaces and hyphens", max_len=24)
+                                 hint="Letters, spaces and hyphens",
+                                 max_len=24)
         gender = f"self-described: {typed}"
     return {"sonaID": sona_id, "age": int(age), "gender": gender}
 
@@ -234,7 +236,7 @@ def main():
                           "Then look at the object that name belongs to, \n\n"
                           "and keep looking at it to make your choice.\n\n"
                           "Press space to start. Press Esc to end the session.")
-        for trial_n, target in enumerate(pres.ring_order, start=1):
+        for trial_n, target in enumerate(ORDER["trialOrder"], start=1):
             row = run_trial(pres, target, trial_n)
             trialdata.write_row(session, row)
             results.append(row)

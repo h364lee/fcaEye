@@ -6,7 +6,8 @@ config.ATTRIBUTES. For example, with m1 = size (1 = big), m2 = colour
 big_black_square.png.
 """
 
-from config import ATTRIBUTES, CONTEXT, GEOMETRY, IMAGE_NAME_ORDER, NAMES, PATHS
+from config import (ATTRIBUTES, CONTEXT, GEOMETRY, IMAGE_NAME_ORDER, NAMES,
+                    ORDER, PATHS)
 
 
 def object_image(obj):
@@ -56,16 +57,26 @@ def check_design():
             raise ValueError(f"CONTEXT[{obj!r}] = {row}: it needs "
                              f"{len(ATTRIBUTES)} values, each 0 or 1")
 
+    ring, trials = ORDER["ringOrder"], ORDER["trialOrder"]
+    if sorted(ring) != sorted(CONTEXT):
+        raise ValueError(f"ORDER['ringOrder'] = {ring}: it must hold each of "
+                         f"{list(CONTEXT)} exactly once")
+    unknown = [obj for obj in trials if obj not in CONTEXT]
+    if not trials or unknown:
+        raise ValueError(f"ORDER['trialOrder'] must be a non-empty list of "
+                         f"{list(CONTEXT)}; unknown: {unknown}")
+
     images = {obj: object_image(obj) for obj in CONTEXT}
 
-    # With features standing for attributes, equal rows mean equal images,
-    # and two objects that look the same cannot be told apart.
+    # With features standing for attributes, equal rows mean equal images.
+    # A formal context may have equal rows, so this only warns; but the
+    # participant cannot tell such objects apart by how they look.
     seen = {}
     for obj, image in images.items():
         if image in seen:
-            raise ValueError(f"{seen[image]} and {obj} have the same row in "
-                             f"CONTEXT, so both would show {image}")
-        seen[image] = obj
+            print(f"WARNING: {seen[image]} and {obj} have the same row in "
+                  f"CONTEXT, so both will show {image}")
+        seen.setdefault(image, obj)
 
     missing = [image for image in images.values()
                if not (PATHS["stimDir"] / image).exists()]

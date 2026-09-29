@@ -3,7 +3,7 @@ import sys
 from psychopy import core, event, visual
 
 import design
-from config import CONTEXT, DISPLAY, GEOMETRY, NAMES, PATHS
+from config import CONTEXT, DISPLAY, GEOMETRY, NAMES, ORDER, PATHS
 
 # Key names that do not equal the character they type.
 KEY_CHARS = {"space": " ", "minus": "-"}
@@ -105,13 +105,13 @@ class Presentation:
             self.win, text="", height=GEOMETRY['feedbackNameHeight_px'], color="white"
         )
 
-        if GEOMETRY['feedbackWrongMark'] not in ("x", "circle"):
+        if GEOMETRY['feedbackWrongMark'] not in ("x", "o"):
             raise ValueError("GEOMETRY['feedbackWrongMark'] must be \"x\" or "
-                             f"\"circle\"; it is {GEOMETRY['feedbackWrongMark']!r}")
+                             f"\"o\"; it is {GEOMETRY['feedbackWrongMark']!r}")
 
-        # load object images & decide ring order
+        # load object images; the ring order comes from config
         self.stims = self.load_objects()
-        self.ring_order = list(self.stims)
+        self.ring_order = list(ORDER["ringOrder"])
 
 
     def load_objects(self):
@@ -150,7 +150,8 @@ class Presentation:
 
         correct:   correct object, its name under it, green circle around it
         incorrect: correct object with its name under it, and the chosen
-                   object with a red X over it or a red circle around it
+                   object with a red X over it ("x") or a red circle
+                   around it ("o")
                    (GEOMETRY['feedbackWrongMark'])
         timeout:   correct object with its name under it, no circle
         """
