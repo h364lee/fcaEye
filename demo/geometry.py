@@ -9,11 +9,6 @@ from config import CALIBRATION, DISPLAY, GEOMETRY
 
 def px_per_deg():
     """Screen pixels per degree of visual angle.
-
-    Shared so that anything expressing a distance in degrees converts it the
-    same way the calibration does. Only accurate for small angles: it takes
-    the tangent of one degree and scales linearly, so it underestimates
-    distances far from the centre.
     """
     px_per_mm = DISPLAY['size'][0] / CALIBRATION['screenSize_mm'][0]
     mm_per_deg = math.tan(math.radians(1)) * CALIBRATION['viewDist_mm']
@@ -23,10 +18,9 @@ def px_per_deg():
 def ring_rotation():
     """Ring rotation in degrees for one trial, from GEOMETRY['ringRotation'].
 
-    A number is used as given (0 = first slot at 3 o'clock; positive turns
-    the ring counter-clockwise). "random" draws a new rotation each trial
-    between 0 and the angle between two slots; larger rotations would only
-    repeat the same layouts.
+    0 = first slot at 3 o'clock; positive turns the ring counter-clockwise). 
+    "random" draws a new rotation each trial between 0 and the angle between two slots; 
+    larger rotations would only repeat the same layouts.
     """
     value = GEOMETRY['ringRotation']
     if value == "random":

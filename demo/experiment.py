@@ -1,8 +1,6 @@
-"""experiment.py: session flow and trial flow.
+"""experiment.py: session and trial flow.
 
-Session: demographics -> calibration -> recording -> one trial per entry
-in config.ORDER['trialOrder'].
-Demographics and calibration can be switched off in config.SESSION.
+demographics -> calibration -> recording -> 1 trial per config.ORDER['trialOrder'].
 """
 
 import random
@@ -24,7 +22,7 @@ from presentation import Presentation, QuitRequested, check_quit
 
 
 def ask_demographics(pres):
-    """Ask SONA ID, age and gender on the experiment screen."""
+    """Ask SONA ID, age and gender"""
     digits = "0123456789"
     sona_id = pres.type_answer("What is your SONA ID?", digits,
                                hint="6 digits", max_len=6,
@@ -48,7 +46,7 @@ def run_trial(pres, target, trial_n):
     """Run one trial and return what happened.
 
     1. dot alone until central fixation is held
-    2. objects appear; gaze must stay on the dot for a jittered time
+    2. objects appear; gaze must stay on the dot for a jittered config.TIMING["previewDurRange"]
     3. dot becomes the name; poll until selection or timeout
     4. feedback
     5. blank interval
@@ -88,8 +86,7 @@ def run_trial(pres, target, trial_n):
     pres.draw_fixation()
     pres.flip()
     mark("objects_on")
-    # Gaze must stay on the dot, unbroken, for a random time before the
-    # name appears; the random length keeps the name from being anticipated.
+    # Gaze must stay on the dot before the name appears
     preview_s = random.uniform(*TIMING['previewDurRange'])
     response.wait_for_central_fixation(pres, preview_s, positions)
 
