@@ -1,0 +1,91 @@
+// <Lattice object of 8 atoms 24 concepts 6 coatoms at 0x102f50d40>
+digraph Lattice {
+	node [label="" shape=circle style=filled width=.25]
+	edge [dir=none labeldistance=1.5 minlen=2]
+	c0
+	c1
+	c1 -> c1 [color=transparent headlabel=g0 labelangle=270]
+	c1 -> c0
+	c2
+	c2 -> c2 [color=transparent headlabel=g1 labelangle=270]
+	c2 -> c0
+	c3
+	c3 -> c3 [color=transparent headlabel=g2 labelangle=270]
+	c3 -> c0
+	c4
+	c4 -> c4 [color=transparent headlabel=g3 labelangle=270]
+	c4 -> c0
+	c5
+	c5 -> c5 [color=transparent headlabel=g4 labelangle=270]
+	c5 -> c0
+	c6
+	c6 -> c6 [color=transparent headlabel=g5 labelangle=270]
+	c6 -> c0
+	c7
+	c7 -> c7 [color=transparent headlabel=g6 labelangle=270]
+	c7 -> c0
+	c8
+	c8 -> c8 [color=transparent headlabel=g7 labelangle=270]
+	c8 -> c0
+	c9
+	c9 -> c1
+	c9 -> c2
+	c10
+	c10 -> c1
+	c10 -> c3
+	c11
+	c11 -> c1
+	c11 -> c8
+	c12
+	c12 -> c3
+	c12 -> c4
+	c13
+	c13 -> c3
+	c13 -> c6
+	c14
+	c14 -> c5
+	c14 -> c7
+	c15
+	c15 -> c2
+	c15 -> c7
+	c15 -> c8
+	c16
+	c16 -> c4
+	c16 -> c5
+	c16 -> c6
+	c17
+	c17 -> c17 [color=transparent labelangle=90 taillabel=m0]
+	c17 -> c9
+	c17 -> c10
+	c17 -> c12
+	c18
+	c18 -> c18 [color=transparent labelangle=90 taillabel=m2]
+	c18 -> c9
+	c18 -> c11
+	c18 -> c15
+	c19
+	c19 -> c19 [color=transparent labelangle=90 taillabel=m1]
+	c19 -> c10
+	c19 -> c11
+	c19 -> c13
+	c20
+	c20 -> c20 [color=transparent labelangle=90 taillabel=m4]
+	c20 -> c14
+	c20 -> c15
+	c21
+	c21 -> c21 [color=transparent labelangle=90 taillabel=m3]
+	c21 -> c12
+	c21 -> c13
+	c21 -> c16
+	c22
+	c22 -> c22 [color=transparent labelangle=90 taillabel=m5]
+	c22 -> c14
+	c22 -> c16
+	c23
+	c23 -> c17
+	c23 -> c18
+	c23 -> c19
+	c23 -> c20
+	c23 -> c21
+	c23 -> c22
+}
