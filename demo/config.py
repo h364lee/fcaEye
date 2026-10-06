@@ -24,7 +24,7 @@ DISPLAY = {
 
 GEOMETRY = {
     "ringRadius": 255,               # ring radius 
-    "objCount": 5,  
+    "objCount": 8,  
     "objSize_px": 120,
     "centralDotRadius_px": 5,        # center fixation dot radius
     "objSelectRadius_px": 100,       # radius for an object for selection 
@@ -44,37 +44,48 @@ TIMING = {
 
 # COUNTERBALANCING
 
-CONTEXT = {
-    "g1": [1, 0, 0],
-    "g2": [1, 0, 0],
-    "g3": [1, 0, 0],
-    "g4": [1, 0, 0],
-    "g5": [1, 0, 0],
-}
+# The context (objects x attributes) is in context.py, not here.
 
-# Which visual feature stands for each attribute, and what 0 and 1 mean
+# Which visual feature stands for each attribute, and what 0 and 1 mean.
+# Keys must be m0, m1, ... in column order of CONTEXT. Counterbalance by
+# changing which feature each attribute gets. 1 always = feature present.
+# PLACEHOLDER features, from the octagon illustration.
 ATTRIBUTES = {
-    "m1": {"feature": "size", 1: "big", 0: "small"},
-    "m2": {"feature": "colour", 1: "black", 0: "white"},
-    "m3": {"feature": "shape", 1: "tri", 0: "square"},
+    "m0": {"feature": "fill", 1: "orange", 0: "gray"},
+    "m1": {"feature": "disk", 1: "disk", 0: "none"},
+    "m2": {"feature": "stripes", 1: "stripes", 0: "none"},
+    "m3": {"feature": "dots", 1: "dots", 0: "none"},
+    "m4": {"feature": "outline", 1: "thick", 0: "none"},
+    "m5": {"feature": "notch", 1: "notch", 0: "none"},
 }
 
+# PLACEHOLDER: g5-g7 names are temporary, not yet matched to the others.
 NAMES = {
-    "g1": "Guli",
-    "g2": "Domu",
-    "g3": "Vemi",
-    "g4": "Zudo",
-    "g5": "Tora",
+    "g0": "Guli",
+    "g1": "Domu",
+    "g2": "Vemi",
+    "g3": "Zudo",
+    "g4": "Tora",
+    "g5": "Kesa",
+    "g6": "Pino",
+    "g7": "Ruba",
 }
 
-# Where each object sits on the ring, and which object is the target on
-# each trial. Edit both lists before each session.
+# Where each object sits on the ring. Edit before each session.
 ORDER = {
     # Slot 1 is at 3 o'clock (before ringRotation); later slots go
     # counter-clockwise. Each object exactly once.
-    "ringOrder": ["g1", "g2", "g3", "g4", "g5"],
-    # Target of trial 1, 2, 3, ... Any length; an object can repeat.
-    "trialOrder": ["g1", "g1", "g2", "g2", "g5"],
+    "ringOrder": ["g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7"],
+}
+
+# Trial order: an Euler tour over the objects (design.trial_sequence), so
+# every transition i -> j between consecutive trials appears equally often.
+# A new random seed (1-9999) each session; it is saved in the data file.
+EULER_TOUR = {
+    "stay_trial": False,    # allow i -> i (same object twice in a row)
+    "tour_repeats": 1,      # full tours joined end to end; each i -> j
+                            # appears this many times. 8 objects, no stay:
+                            # 56 transitions per tour, so 56 * repeats + 1 trials
 }
 
 
@@ -88,9 +99,10 @@ PATHS = {
     "dataDir": PROJECT_DIR / "data",
 }
 
-# Order of the feature words in the image file names, as objectGen.py
-# writes them: <size>_<colour>_<shape>.png
-IMAGE_NAME_ORDER = ["size", "colour", "shape"]
+# Fixed feature order of the digits in the image file names, as
+# stimuli.py writes them. 1 = present. E.g. 110000.png = fill + disk.
+# Does not change with counterbalancing.
+IMAGE_NAME_ORDER = ["fill", "disk", "stripes", "dots", "outline", "notch"]
 
 CALIBRATION = {
 # matched CRS LiveTrack calibrate.py 2026-09-14

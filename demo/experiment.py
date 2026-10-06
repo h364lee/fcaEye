@@ -1,6 +1,7 @@
 """experiment.py: session and trial flow.
 
-demographics -> calibration -> recording -> 1 trial per config.ORDER['trialOrder'].
+demographics -> calibration -> recording -> 1 trial per object in
+design.trial_sequence(seed), with a new seed each session.
 """
 
 import random
@@ -17,7 +18,7 @@ import eventlog
 import geometry
 import response
 import trialdata
-from config import CENTRAL_FIXATION, GENDER_OPTIONS, NAMES, ORDER, SESSION, TIMING
+from config import CENTRAL_FIXATION, GENDER_OPTIONS, NAMES, SESSION, TIMING
 from presentation import Presentation, QuitRequested, check_quit
 
 
@@ -42,8 +43,10 @@ def ask_demographics(pres):
     return {"sonaID": sona_id, "age": int(age), "gender": gender}
 
 
-def run_trial(pres, target, trial_n):
+def run_trial(pres, target, trial_n, previous_obj):
     """Run one trial and return what happened.
+
+    previous_obj: the previous trial's target (the prime), None on trial 1.
 
     1. dot alone until central fixation is held
     2. objects appear; gaze must stay on the dot for a jittered config.TIMING["previewDurRange"]
@@ -139,6 +142,7 @@ def run_trial(pres, target, trial_n):
     row = {
         "trialN": trial_n,
         "targetObj": target,
+        "previousObj": previous_obj,
         "name": NAMES[target],
         "targetImage": design.image_code(target),
         "rotation_deg": rotation,
@@ -162,6 +166,13 @@ def main():
     geometry.check_tolerance()        # fail before anything opens
     geometry.ring_rotation()          # stops here if the setting is invalid
     design.check_design()
+
+    # Trial order for this session. Built before anything opens, so a
+    # problem shows up at once. The seed goes in the data file.
+    seed = random.randint(1, 9999)
+    sequence = design.trial_sequence(seed)
+    print(f"Seed {seed}: {len(sequence)} trials")
+
     pres = Presentation()
     screen_rate = pres.win.getActualFrameRate()    # None if it was unstable
 
@@ -218,7 +229,7 @@ def main():
         session = trialdata.session_columns(
             participant, accuracy,
             datetime.now().isoformat(timespec="seconds"),
-            screen_rate, tracker_rate, tracked_eyes, pres.ring_order)
+            screen_rate, tracker_rate, tracked_eyes, pres.ring_order, seed)
         print(f"Trials to {trialdata.open_file(path, session)}")
 
         # One marker for everything known at the start. Markers sent close
@@ -227,16 +238,19 @@ def main():
         calibration = {f"cal_{eye}_deg": f"{entry['accuracy_deg']:.3f}"
                        for eye, entry in accuracy.items()}
         eventlog.mark("session_start", participant=pid,
-                      ring_order="|".join(pres.ring_order), **calibration)
+                      ring_order="|".join(pres.ring_order), seed=seed,
+                      **calibration)
 
         pres.show_message("Look at the central dot until a name appears.\n\n"
                           "Then look at the object that name belongs to, \n\n"
                           "and keep looking at it to make your choice.\n\n"
                           "Press space to start. Press Esc to end the session.")
-        for trial_n, target in enumerate(ORDER["trialOrder"], start=1):
-            row = run_trial(pres, target, trial_n)
+        previous_obj = None               # trial 1 has no prime
+        for trial_n, target in enumerate(sequence, start=1):
+            row = run_trial(pres, target, trial_n, previous_obj)
             trialdata.write_row(session, row)
             results.append(row)
+            previous_obj = target
         eventlog.mark("session_end")
     except response.FixationTimeout as e:
         eventlog.mark("session_aborted", reason="fixation_timeout")

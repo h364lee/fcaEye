@@ -3,7 +3,8 @@ import sys
 from psychopy import core, event, visual
 
 import design
-from config import CONTEXT, DISPLAY, GEOMETRY, NAMES, ORDER, PATHS
+from config import DISPLAY, GEOMETRY, NAMES, ORDER, PATHS
+from context import CONTEXT
 
 # Key names that do not equal the character they type.
 KEY_CHARS = {"space": " ", "minus": "-"}

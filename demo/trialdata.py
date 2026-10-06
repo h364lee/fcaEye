@@ -9,14 +9,16 @@ at most the trial that was running.
 """
 
 import csv
+import platform
+from importlib.metadata import version
 
 import config
 import design
 from config import NAMES
 
 # Settings groups copied into the file, one column per key, as "GROUP.key".
-SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "ORDER", "DWELL_SELECTION",
-            "CENTRAL_FIXATION", "CALIBRATION"]
+SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "ORDER", "EULER_TOUR",
+            "DWELL_SELECTION", "CENTRAL_FIXATION", "CALIBRATION"]
 
 # Marker name -> column holding the PsychoPy time (s) the marker was written.
 EVENT_TIMES = {
@@ -41,11 +43,15 @@ _settings = None
 
 
 def session_columns(participant, accuracy, session_start, screen_rate,
-                    tracker_rate, tracked_eyes, ring_order):
+                    tracker_rate, tracked_eyes, ring_order, seed):
     """Everything that is the same for every trial, except the settings."""
     columns = dict(participant)
     columns.update({
         "sessionStart": session_start,
+        # Software that ran this session, to trace version differences later
+        "pythonVersion": platform.python_version(),
+        "psychopyVersion": version("psychopy"),
+        "os": platform.platform(),
         "screenRate_Hz": screen_rate,
         "trackerRate_Hz": tracker_rate,
         "trackLeft": tracked_eyes[0],
@@ -60,6 +66,8 @@ def session_columns(participant, accuracy, session_start, screen_rate,
     for obj in NAMES:
         columns[f"{obj}Image"] = design.image_code(obj)
     columns["ringOrder"] = "|".join(ring_order)
+    # design.trial_sequence(seed) rebuilds this session's trial order
+    columns["seed"] = seed
     return columns
 
 
@@ -74,7 +82,8 @@ def settings_columns():
 
 def trial_column_names():
     """Column names of the dict run_trial returns, in file order."""
-    names = ["trialN", "targetObj", "name", "targetImage", "rotation_deg"]
+    names = ["trialN", "targetObj", "previousObj", "name", "targetImage",
+             "rotation_deg"]
     for obj in NAMES:
         names += [f"{obj}X", f"{obj}Y"]
     names += ["previewDur_s", "selected", "outcome", "selection_ms",
