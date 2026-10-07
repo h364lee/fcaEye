@@ -49,12 +49,13 @@ def run_trial(pres, target, trial_n, previous_obj):
     previous_obj: the previous trial's target (the prime), None on trial 1.
 
     1. dot alone until central fixation is held
-    2. objects appear; gaze must stay on the dot for a jittered config.TIMING["previewDurRange"]
-    3. dot becomes the name; poll until selection or timeout
+    2. names appear on the ring; gaze must stay on the dot for a jittered
+       config.TIMING["previewDurRange"]
+    3. dot becomes the object; poll until a name is selected or timeout
     4. feedback
     5. blank interval
 
-    Objects appear before the cue so that cue-to-gaze time does not
+    Names appear before the object so that cue-to-gaze time does not
     include searching for them.
 
     Each event is marked in the tracker's data file straight after the
@@ -85,21 +86,21 @@ def run_trial(pres, target, trial_n, previous_obj):
 
     # --- 2. preview -------------------------------------------------------
     # Jittered so cue onset cannot be anticipated.
-    pres.draw_array(positions)
+    pres.draw_names(positions)
     pres.draw_fixation()
     pres.flip()
-    mark("objects_on")
-    # Gaze must stay on the dot before the name appears
+    mark("names_on")
+    # Gaze must stay on the dot before the object appears
     preview_s = random.uniform(*TIMING['previewDurRange'])
     response.wait_for_central_fixation(pres, preview_s, positions)
 
     # --- 3. cue and response ---------------------------------------------
     responder = response.GazeDwellResponder(positions, pres.ring_order)
 
-    pres.draw_array(positions)
-    pres.draw_cue(target)
+    pres.draw_names(positions)
+    pres.draw_object(target)
     pres.flip()
-    mark("name_on")
+    mark("object_on")
     responder.start()
 
     # Redraw every frame: flipping advances the frame, and the responder
@@ -108,8 +109,8 @@ def run_trial(pres, target, trial_n, previous_obj):
     while clock.getTime() < TIMING['responseTimeout_s'] and responder.result() is None:
         check_quit()
         responder.poll()
-        pres.draw_array(positions)
-        pres.draw_cue(target)
+        pres.draw_names(positions)
+        pres.draw_object(target)
         pres.flip()
 
     outcome = responder.result()
@@ -164,6 +165,7 @@ def run_trial(pres, target, trial_n, previous_obj):
 
 def main():
     geometry.check_tolerance()        # fail before anything opens
+    geometry.check_feedback_fit()
     geometry.ring_rotation()          # stops here if the setting is invalid
     design.check_design()
 
@@ -241,8 +243,8 @@ def main():
                       ring_order="|".join(pres.ring_order), seed=seed,
                       **calibration)
 
-        pres.show_message("Look at the central dot until a name appears.\n\n"
-                          "Then look at the object that name belongs to, \n\n"
+        pres.show_message("Look at the central dot until an object appears.\n\n"
+                          "Then look at the name that belongs to it, \n\n"
                           "and keep looking at it to make your choice.\n\n"
                           "Press space to start. Press Esc to end the session.")
         previous_obj = None               # trial 1 has no prime

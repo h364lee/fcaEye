@@ -24,8 +24,8 @@ SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "ORDER", "EULER_TOUR",
 EVENT_TIMES = {
     "dot_on": "dotOn_s",
     "fixation_held": "fixationHeld_s",
-    "objects_on": "objectsOn_s",
-    "name_on": "nameOn_s",
+    "names_on": "namesOn_s",
+    "object_on": "objectOn_s",
     "selection": "response_s",
     "timeout": "response_s",
     "feedback_on": "feedbackOn_s",
@@ -34,7 +34,7 @@ EVENT_TIMES = {
 
 
 def tracker_column(column):
-    """Tracker-clock of an event column: "nameOn_s" -> "nameOnTracker_us"."""
+    """Tracker-clock of an event column: "objectOn_s" -> "objectOnTracker_us"."""
     return column.removesuffix("_s") + "Tracker_us"
 
 _file = None

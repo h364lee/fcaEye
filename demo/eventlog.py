@@ -1,7 +1,7 @@
 """Event markers in the data file.
 
 Comment format, one event per comment:
-    event=name_on trial=3
+    event=object_on trial=3
 """
 
 import contextlib

@@ -31,8 +31,8 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 EVENT_TIMES = {
     "dot_on": "dotOn_s",
     "fixation_held": "fixationHeld_s",
-    "objects_on": "objectsOn_s",
-    "name_on": "nameOn_s",
+    "names_on": "namesOn_s",
+    "object_on": "objectOn_s",
     "selection": "response_s",
     "timeout": "response_s",
     "feedback_on": "feedbackOn_s",

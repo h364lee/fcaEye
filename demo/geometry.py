@@ -62,6 +62,47 @@ def object_at(point, positions, ring_order):
 
 
 
+def pair_circle_radius():
+    """Radius of the green feedback circle around a name and its object.
+
+    The circle is centred halfway between the name and the object, so it
+    must reach half the name-object distance plus half the object image.
+    The name is smaller than the object, so it fits too.
+    """
+    return GEOMETRY['feedbackNameOffset_px'] / 2 + GEOMETRY['objSize_px'] / 2
+
+
+def feedback_obj_pos(name_pos):
+    """Where the object goes in feedback: feedbackNameOffset_px from the
+    name, inward along the line to the screen centre.
+
+    Inward rather than above, so the object stays on screen for every slot.
+    """
+    x, y = name_pos
+    r = math.hypot(x, y)
+    shrink = (r - GEOMETRY['feedbackNameOffset_px']) / r
+    return (x * shrink, y * shrink)
+
+
+def check_feedback_fit():
+    """Stop if the feedback circle can leave the screen.
+
+    The circle's farthest point from the screen centre is its own centre
+    (ring radius minus half the name-object distance) plus its radius. With
+    ringRotation "random" a slot can sit at any angle, so it must fit
+    within the nearer screen edge: half of the shorter screen side.
+    """
+    farthest = (GEOMETRY['ringRadius'] - GEOMETRY['feedbackNameOffset_px'] / 2
+                + pair_circle_radius())
+    edge = min(DISPLAY['size']) / 2
+    if farthest > edge:
+        raise ValueError(
+            f"The feedback circle reaches {farthest:.0f} px from the centre, but "
+            f"the screen edge is {edge:.0f} px away. Lower GEOMETRY['ringRadius'] "
+            f"by at least {farthest - edge:.0f} px, or reduce objSize_px or "
+            "feedbackNameOffset_px.")
+
+
 def adjacent_gap():
     # Distance between two adjacent objects on the ring
     # output: distance in pixels

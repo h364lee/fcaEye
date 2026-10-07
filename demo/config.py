@@ -23,15 +23,20 @@ DISPLAY = {
 }
 
 GEOMETRY = {
-    "ringRadius": 255,               # ring radius 
+    "ringRadius": 310,               # screen centre to each name centre. As large
+                                     # as fits: check_feedback_fit() stops if the
+                                     # feedback circle would leave the screen
     "objCount": 8,  
-    "objSize_px": 120,
+    "objSize_px": 120,               # object image, in the centre and in feedback
+    "height_name_px": 36,            # letter height of the names on the ring
     "centralDotRadius_px": 5,        # center fixation dot radius
-    "objSelectRadius_px": 100,       # radius for an object for selection 
-    "feedbackCircleRadius_px": 68,   # circle around an object, in feedback
+    "objSelectRadius_px": 100,       # gaze within this of a name centre selects it
+    "feedbackCircleRadius_px": 68,   # size of the mark on a wrong name ("x" or "o")
     "feedbackWrongMark": "o",        # mark on a wrong choice: "x" or "o"
-    "feedbackNameOffset_px": 80,     # object centre to name centre, in feedback
-    "feedbackNameHeight_px": 24,     # letter height of the name, in feedback
+    "feedbackNameOffset_px": 80,     # name centre to object centre in feedback;
+                                     # the object goes inward, toward the centre.
+                                     # The green circle around the pair is computed
+                                     # from this and objSize_px
     "ringRotation": 0,               # degrees, or "random" for a new rotation each trial
 }
 

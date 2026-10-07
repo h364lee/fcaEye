@@ -45,8 +45,8 @@ def newest_tracked():
 def wait_for_central_fixation(pres, hold_s, positions=None):
     """Hold here until gaze has stayed near the screen centre for hold_s.
 
-    Without positions, only the dot is on screen. With positions, the objects
-    are drawn too, so gaze must stay on the dot while the objects are visible.
+    Without positions, only the dot is on screen. With positions, the names
+    are drawn too, so gaze must stay on the dot while the names are visible.
     If gaze leaves the dot, the count starts again from zero.
 
     The screen is redrawn every frame, because flipping is what advances the
@@ -59,7 +59,7 @@ def wait_for_central_fixation(pres, hold_s, positions=None):
     Args:
         pres: a Presentation.
         hold_s: how long gaze must stay on the dot, in seconds.
-        positions: object positions to draw, or None for the dot alone.
+        positions: ring positions of the names, or None for the dot alone.
 
     Raises:
         FixationTimeout: the hold was never achieved within timeout_s.
@@ -103,7 +103,7 @@ def wait_for_central_fixation(pres, hold_s, positions=None):
                 held_s = 0.0
 
         if positions is not None:
-            pres.draw_array(positions)
+            pres.draw_names(positions)
         pres.draw_fixation()
         pres.flip()
 

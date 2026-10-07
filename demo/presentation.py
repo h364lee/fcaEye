@@ -3,6 +3,7 @@ import sys
 from psychopy import core, event, visual
 
 import design
+import geometry
 from config import DISPLAY, GEOMETRY, NAMES, ORDER, PATHS
 from context import CONTEXT
 
@@ -47,11 +48,10 @@ class Presentation:
         """
         1. open the window
         2. build the fixation dot
-        3. build the cue text
-        4. build the message text
-        5. build the feedback highlight and feedback name text
-        6. load the object images
-        7. decide the ring order
+        3. build the message text
+        4. build the feedback circles and wrong mark
+        5. load the object images and build the name texts
+        6. decide the ring order
         """
         # window parameters from config.py
         self.win = visual.Window(
@@ -72,22 +72,26 @@ class Presentation:
             lineColor="white",
         )
 
-        # cue name text
-        self.cue_text = visual.TextStim(
-            self.win, text="", height=36, color="white", pos=(0, 0)
-        )
-
         # instruction text
         self.message = visual.TextStim(
             self.win, text="", height=24, color="white", wrapWidth=850
         )
 
-        # feedback highlight circle
-        self.highlight = visual.Circle(
+        # feedback: green circle around the correct name and its object
+        self.pair_circle = visual.Circle(
+            self.win,
+            radius=geometry.pair_circle_radius(),
+            fillColor=None,
+            lineColor="lime",
+            lineWidth=5,
+        )
+
+        # feedback: red circle around a wrong name (feedbackWrongMark "o")
+        self.wrong_circle = visual.Circle(
             self.win,
             radius=GEOMETRY['feedbackCircleRadius_px'],
             fillColor=None,
-            lineColor="lime",
+            lineColor="red",
             lineWidth=5,
         )
 
@@ -101,17 +105,19 @@ class Presentation:
                         lineColor="red", lineWidth=5),
         ]
 
-        # feedback name text, placed under the correct object
-        self.feedback_name = visual.TextStim(
-            self.win, text="", height=GEOMETRY['feedbackNameHeight_px'], color="white"
-        )
-
         if GEOMETRY['feedbackWrongMark'] not in ("x", "o"):
             raise ValueError("GEOMETRY['feedbackWrongMark'] must be \"x\" or "
                              f"\"o\"; it is {GEOMETRY['feedbackWrongMark']!r}")
 
-        # load object images; the ring order comes from config
-        self.stims = self.load_objects()
+        # object images (centre cue, feedback) and name texts (ring)
+        self.obj_images = self.load_objects()
+        self.name_texts = {
+            obj: visual.TextStim(self.win, text=NAMES[obj],
+                                 height=GEOMETRY['height_name_px'],
+                                 color="white")
+            for obj in NAMES
+        }
+        # slot order on the ring comes from config
         self.ring_order = list(ORDER["ringOrder"])
 
 
@@ -132,57 +138,60 @@ class Presentation:
         """
         self.fixation.draw()
 
-    def draw_array(self, positions):
-        """Place each object at its slot and draw it. 
+    def draw_names(self, positions):
+        """Draw each object's name centred on its ring slot.
         """
-        for name, pos in zip(self.ring_order, positions):
-            stim = self.stims[name]
-            stim.pos = pos
-            stim.draw()
+        for obj, pos in zip(self.ring_order, positions):
+            text = self.name_texts[obj]
+            text.pos = pos
+            text.draw()
 
-    def draw_cue(self, name):
-        """Draw cue name for the object at the centre.
+    def draw_object(self, target):
+        """Draw the target object in the centre (the go signal).
         """
-        self.cue_text.text = NAMES[name]
-        self.cue_text.draw()
+        image = self.obj_images[target]
+        image.pos = (0, 0)
+        image.draw()
 
     def draw_feedback(self, target, selection, positions):
-        """Draw only the correct object and, after an error, the chosen one.
+        """Draw the correct name with its object; all other names disappear.
 
-        correct:   correct object, its name under it, green circle around it
-        incorrect: correct object with its name under it, and the chosen
-                   object with a red X over it ("x") or a red circle
-                   around it ("o")
-                   (GEOMETRY['feedbackWrongMark'])
-        timeout:   correct object with its name under it, no circle
+        The object goes feedbackNameOffset_px inward from the correct name.
+
+        correct:   correct name + object, green circle around the pair
+        incorrect: correct name + object, green circle around the pair, and
+                   the chosen name with a red X over it ("x") or a red
+                   circle around it ("o") (GEOMETRY['feedbackWrongMark'])
+        timeout:   correct name + object, no circle, no mark
         """
-        correct_pos = positions[self.ring_order.index(target)]
-        correct_stim = self.stims[target]
-        correct_stim.pos = correct_pos
-        correct_stim.draw()
+        name_pos = positions[self.ring_order.index(target)]
+        obj_pos = geometry.feedback_obj_pos(name_pos)
 
-        self.feedback_name.text = NAMES[target]
-        self.feedback_name.pos = (correct_pos[0],
-                                  correct_pos[1] - GEOMETRY['feedbackNameOffset_px'])
-        self.feedback_name.draw()
+        self.name_texts[target].pos = name_pos
+        self.name_texts[target].draw()
+        image = self.obj_images[target]
+        image.pos = obj_pos
+        image.draw()
 
-        if selection == target:
-            self.highlight.lineColor = 'lime'
-            self.highlight.pos = correct_pos
-            self.highlight.draw()
-        elif selection is not None:
+        if selection is None:          # timeout
+            return
+
+        # halfway between name and object
+        self.pair_circle.pos = ((name_pos[0] + obj_pos[0]) / 2,
+                                (name_pos[1] + obj_pos[1]) / 2)
+        self.pair_circle.draw()
+
+        if selection != target:
             selected_pos = positions[self.ring_order.index(selection)]
-            selected_stim = self.stims[selection]
-            selected_stim.pos = selected_pos
-            selected_stim.draw()
+            self.name_texts[selection].pos = selected_pos
+            self.name_texts[selection].draw()
             if GEOMETRY['feedbackWrongMark'] == "x":
                 for line in self.wrong_mark:
                     line.pos = selected_pos
                     line.draw()
             else:
-                self.highlight.lineColor = 'red'
-                self.highlight.pos = selected_pos
-                self.highlight.draw()
+                self.wrong_circle.pos = selected_pos
+                self.wrong_circle.draw()
 
     def flip(self):
         """ just flip() - update the screen
