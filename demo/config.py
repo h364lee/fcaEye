@@ -54,14 +54,14 @@ TIMING = {
 # Which visual feature stands for each attribute, and what 0 and 1 mean.
 # Keys must be m0, m1, ... in column order of CONTEXT. Counterbalance by
 # changing which feature each attribute gets. 1 always = feature present.
-# PLACEHOLDER features, from the octagon illustration.
+# Features are described in stimuli.py.
 ATTRIBUTES = {
-    "m0": {"feature": "fill", 1: "orange", 0: "gray"},
-    "m1": {"feature": "disk", 1: "disk", 0: "none"},
-    "m2": {"feature": "stripes", 1: "stripes", 0: "none"},
-    "m3": {"feature": "dots", 1: "dots", 0: "none"},
-    "m4": {"feature": "outline", 1: "thick", 0: "none"},
-    "m5": {"feature": "notch", 1: "notch", 0: "none"},
+    "m0": {"feature": "colour", 1: "orange", 0: "gray"},
+    "m1": {"feature": "stripes", 1: "stripes", 0: "none"},
+    "m2": {"feature": "outline", 1: "thick", 0: "none"},
+    "m3": {"feature": "hole", 1: "hole", 0: "none"},
+    "m4": {"feature": "slot", 1: "slot", 0: "none"},
+    "m5": {"feature": "circle", 1: "circle", 0: "square"},
 }
 
 # PLACEHOLDER: g5-g7 names are temporary, not yet matched to the others.
@@ -105,9 +105,9 @@ PATHS = {
 }
 
 # Fixed feature order of the digits in the image file names, as
-# stimuli.py writes them. 1 = present. E.g. 110000.png = fill + disk.
+# stimuli.py writes them. 1 = present. E.g. 100001.png = orange circle.
 # Does not change with counterbalancing.
-IMAGE_NAME_ORDER = ["fill", "disk", "stripes", "dots", "outline", "notch"]
+IMAGE_NAME_ORDER = ["colour", "stripes", "outline", "hole", "slot", "circle"]
 
 CALIBRATION = {
 # matched CRS LiveTrack calibrate.py 2026-09-14
