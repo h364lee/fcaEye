@@ -11,7 +11,7 @@ sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
 import LiveTrack
 
 import geometry
-from config import CENTRAL_FIXATION, DWELL_SELECTION, GEOMETRY
+from config import CENTRAL_FIXATION, DWELL_SELECTION
 from presentation import check_quit
 
 import math
@@ -123,13 +123,17 @@ class GazeDwellResponder:
         result()  each frame; returns None until a selection is made
     """
 
-    def __init__(self, positions, ring_order):
+    def __init__(self, positions, ring_order, radius_px):
         self.positions = positions
         self.ring_order = ring_order
+        self.radius_px = radius_px        # selection circle around each name
         self.clock = core.Clock()
 
         # degrees -> pixels, same formula calibrate.py uses
         self.stability_px = DWELL_SELECTION["dwellRadius_deg"] * geometry.px_per_deg()
+        # "Left the centre" uses the same radius as "on the dot" in
+        # wait_for_central_fixation, so the two measures agree
+        self.central_px = CENTRAL_FIXATION["centralRadius_deg"] * geometry.px_per_deg()
         self.dwell_s = DWELL_SELECTION["dwell_ms"] / 1000
         self.blink_gap_s = DWELL_SELECTION["blinkTimeout_ms"] / 1000
 
@@ -179,10 +183,11 @@ class GazeDwellResponder:
         self.gap_start = None
 
         if (self.first_move_ms is None
-                and math.hypot(*pos) > GEOMETRY['objSelectRadius_px']):
+                and math.hypot(*pos) > self.central_px):
             self.first_move_ms = now * 1000
 
-        here = geometry.object_at(pos, self.positions, self.ring_order)
+        here = geometry.object_at(pos, self.positions, self.ring_order,
+                                  self.radius_px)
 
         if self.anchor is None:
             self._restart(pos, here)

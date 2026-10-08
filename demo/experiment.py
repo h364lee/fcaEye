@@ -129,7 +129,8 @@ def run_trial(pres, target, trial_n, previous_obj):
     response.wait_for_central_fixation(pres, preview_s, positions)
 
     # --- 3. cue and response ---------------------------------------------
-    responder = response.GazeDwellResponder(positions, pres.ring_order)
+    responder = response.GazeDwellResponder(positions, pres.ring_order,
+                                            pres.name_radius_px)
 
     pres.draw_names(positions)
     pres.draw_object(target)
@@ -198,7 +199,6 @@ def run_trial(pres, target, trial_n, previous_obj):
 
 
 def main():
-    geometry.check_tolerance()        # fail before anything opens
     geometry.check_feedback_fit()
     geometry.ring_rotation()          # stops here if the setting is invalid
     design.check_design()

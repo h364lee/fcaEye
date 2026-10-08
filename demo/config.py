@@ -23,17 +23,17 @@ DISPLAY = {
 }
 
 GEOMETRY = {
-    "ringRadius": 310,               # screen centre to each name centre. As large
-                                     # as fits: check_feedback_fit() stops if the
-                                     # feedback circle would leave the screen
+    "ringRadius": 310,              
     "objCount": 8,  
     "objSize_px": 120,               # object image, in the centre and in feedback
-    "height_name_px": 36,            # letter height of the names on the ring
+    "height_name_px": 24,            # letter height of the names on the ring
     "centralDotRadius_px": 5,        # center fixation dot radius
-    "objSelectRadius_px": 100,       # gaze within this of a name centre selects it
-    "feedbackCircleRadius_px": 68,   # size of the mark on a wrong name ("x" or "o")
-    "feedbackWrongMark": "o",        # mark on a wrong choice: "x" or "o"
-    "feedbackNameOffset_px": 80,     # name centre to object centre in feedback;
+    "nameSelectMargin_deg": 1.0,     # selection circle around each name:
+                                     # radius = centre-to-corner distance of the
+                                     # widest name + this value.
+    "feedbackCircleRadius_px": 55,   # size of the mark on a wrong name ("x" or "o")
+    "feedbackWrongMark": "x",        # mark on a wrong choice: "x" or "o"
+    "feedbackNameOffset_px": 70,     # name centre to object centre in feedback;
                                      # the object goes below the name (above it
                                      # where the circle would not fit, e.g. the
                                      # bottom slot).
@@ -43,20 +43,17 @@ GEOMETRY = {
 }
 
 TIMING = {
-    "previewDurRange": (0.6, 1.0),    # random from this range to prevent anticipation
+    "previewDurRange": (0.6, 1.0),    
     "feedbackDur": 2.0,
     "iti": 1.0,
-    "responseTimeout_s": 5.0,         # no selection by then -> trial ends as a timeout
+    "responseTimeout_s": 5.0,         
 }
 
 # COUNTERBALANCING
 
-# The context (objects x attributes) is in context.py, not here.
-
 # Which visual feature stands for each attribute, and what 0 and 1 mean.
-# Keys must be m0, m1, ... in column order of CONTEXT. Counterbalance by
-# changing which feature each attribute gets. 1 always = feature present.
-# Features are described in stimuli.py.
+# stimuli.py refers to this.
+
 ATTRIBUTES = {
     "m0": {"feature": "colour", 1: "orange", 0: "gray"},
     "m1": {"feature": "stripes", 1: "stripes", 0: "none"},
@@ -66,7 +63,6 @@ ATTRIBUTES = {
     "m5": {"feature": "circle", 1: "circle", 0: "square"},
 }
 
-# PLACEHOLDER: g5-g7 names are temporary, not yet matched to the others.
 NAMES = {
     "g0": "Guli",
     "g1": "Domu",

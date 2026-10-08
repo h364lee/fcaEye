@@ -118,6 +118,18 @@ class Presentation:
                                  color="white")
             for obj in NAMES
         }
+        # Selection circle around each name, from the names' real size on
+        # screen (boundingBox: width, height in px). Checked here rather than
+        # at startup because the size is only known once the text exists.
+        sizes = [text.boundingBox for text in self.name_texts.values()]
+        self.name_radius_px = geometry.name_select_radius_px(sizes)
+        print(f"Name selection radius: {self.name_radius_px:.0f} px "
+              f"({self.name_radius_px / geometry.px_per_deg():.2f} deg)")
+        try:
+            geometry.check_tolerance(self.name_radius_px)
+        except ValueError:
+            self.win.close()
+            raise
         # slot order on the ring comes from config
         self.ring_order = list(ORDER["ringOrder"])
 

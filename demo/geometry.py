@@ -45,18 +45,31 @@ def ring_positions(rotation_deg):
 
         
 
-def object_at(point, positions, ring_order):
+def name_select_radius_px(name_sizes):
+    """Radius of the selection circle around every name, in pixels.
+
+    name_sizes: (width, height) in px of each name as drawn on screen.
+
+    The circle must cover the whole name, so it starts from the distance
+    between a name's centre and its corner (half the diagonal). The widest
+    name sets this, so every name gets the same circle. The margin is added
+    on top for tracker error.
+    """
+    half_diagonal = max(math.hypot(w / 2, h / 2) for w, h in name_sizes)
+    return half_diagonal + GEOMETRY['nameSelectMargin_deg'] * px_per_deg()
+
+
+def object_at(point, positions, ring_order, radius_px):
     # Decide which object a point is on
 
     # point: (x, y) on screen (centre origin)
     # positions: coordinates of the objects, ring_positions()
     # ring_order: object names (i.e., g1, g2 ...) in slot order
+    # radius_px: selection circle around each name, name_select_radius_px()
 
-    # output: object's name, or None if the point is not within the target radius (tolerance) of any object
-    tolerance = GEOMETRY['objSelectRadius_px']
-
+    # output: object's name, or None if the point is not within the selection circle of any name
     for name, pos in zip(ring_order, positions):
-        if math.dist(pos, point) < tolerance:
+        if math.dist(pos, point) < radius_px:
             return name
     return None
 
@@ -123,11 +136,15 @@ def adjacent_gap():
     return math.dist(pos[0], pos[1])
 
 
-def check_tolerance():
-    # Check if the tolerance radii of two adjacent objects overlap
+def check_tolerance(radius_px):
+    # Check if the selection circles of two adjacent names overlap.
+    # radius_px: from name_select_radius_px()
 
     adj_gap = adjacent_gap()
-    tol = GEOMETRY['objSelectRadius_px']
 
-    if adj_gap < 2 * tol:
-        raise ValueError("The distance between two closest objects is too small for this detection tolerance")
+    if adj_gap < 2 * radius_px:
+        raise ValueError(
+            f"Selection circles overlap: radius {radius_px:.0f} px, but "
+            f"adjacent names are only {adj_gap:.0f} px apart. Lower "
+            "GEOMETRY['nameSelectMargin_deg'] or 'height_name_px', or "
+            "raise 'ringRadius'.")
