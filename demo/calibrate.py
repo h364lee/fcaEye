@@ -198,18 +198,24 @@ def gaze_calibration(win):
     return result
 
 
-def report_calibration(pres, result):
-    """Show the accuracy on screen and the terminal.
+def report_calibration(pres, result, attempt=1):
+    """Report the accuracy in the terminal, for the experimenter only.
+
+    Passes only if BOTH eyes were calibrated and each error is below
+    CALIBRATION["calibrationCriterion_deg"]: both eyes must be trackable
+    (screening criterion). Participants never see the numbers (Screen 4 or
+    4b in experiment.main). pres is kept so the call stays the same.
     """
     threshold = CALIBRATION["calibrationCriterion_deg"]
+    print(f"\n--- Calibration attempt {attempt} "
+          f"(criterion: both eyes < {threshold} deg) ---")
 
-    if not result:
-        pres.show_message("No eye was calibrated.\n\nPress space to continue.")
-        print("No eye was calibrated.")
-        return False
+    missing = [eye for eye in ("left", "right") if eye not in result]
+    for eye in missing:
+        print(f"{eye}: not calibrated  [FAIL]")
 
     lines = []
-    passed = True
+    passed = not missing
     for eye, entry in result.items():
         ok = entry["accuracy_deg"] < threshold
         passed = passed and ok
@@ -219,6 +225,4 @@ def report_calibration(pres, result):
         lines.append(line)
         print(line)
 
-    lines.append("\nPress space to continue.")
-    pres.show_message("\n".join(lines))
     return passed

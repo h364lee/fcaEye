@@ -4,13 +4,14 @@ demographics -> calibration -> recording -> 1 trial per object in
 design.trial_sequence(seed), with a new seed each session.
 """
 
+import csv
 import random
 import sys
 from datetime import datetime
 sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
 import LiveTrack
 
-from psychopy import core
+from psychopy import core, event
 
 import calibrate
 import design
@@ -18,29 +19,62 @@ import eventlog
 import geometry
 import response
 import trialdata
-from config import CENTRAL_FIXATION, GENDER_OPTIONS, NAMES, SESSION, TIMING
+from config import (CENTRAL_FIXATION, GENDER_OPTIONS, IMAGE_NAME_ORDER,
+                    NAMES, PATHS, POSTTASK, SCREEN_TEXT, SESSION, TIMING)
 from presentation import Presentation, QuitRequested, check_quit
 
 
 def ask_demographics(pres):
-    """Ask SONA ID, age and gender"""
+    """Ask SONA ID, age and gender. Age can be skipped (saved as empty)."""
     digits = "0123456789"
-    sona_id = pres.type_answer("What is your SONA ID?", digits,
-                               hint="6 digits", max_len=6,
+    question, hint = SCREEN_TEXT["sonaId"]
+    sona_id = pres.type_answer(question, digits, hint=hint, max_len=6,
                                is_valid=lambda a: len(a) == 6)
-    age = pres.type_answer("What is your age?", digits,
-                           hint="1 to 99", max_len=2,
-                           is_valid=lambda a: 1 <= int(a) <= 99)
-    gender = pres.choose_option("What is your gender?", GENDER_OPTIONS)
+    question, hint = SCREEN_TEXT["age"]
+    age = pres.type_answer(question, digits, hint=hint, max_len=2,
+                           is_valid=lambda a: 1 <= int(a) <= 99, optional=True)
+    gender = pres.choose_option(SCREEN_TEXT["gender"], GENDER_OPTIONS)
 
     if gender == "Prefer to self-describe":
         letters = "abcdefghijklmnopqrstuvwxyz"
-        typed = pres.type_answer("Please describe your gender",
-                                 letters + letters.upper() + " -",
-                                 hint="Letters, spaces and hyphens",
-                                 max_len=24)
+        typed = pres.type_answer(SCREEN_TEXT["selfDescribe"],
+                                 letters + letters.upper() + " -", max_len=24)
         gender = f"self-described: {typed}"
-    return {"sonaID": sona_id, "age": int(age), "gender": gender}
+    return {"sonaID": sona_id, "age": "" if age is None else int(age),
+            "gender": gender}
+
+
+def posttask_q(pres, tracker_path):
+    """Ask the four post-task questions and save the answers.
+
+    Keyboard only; every question can be skipped (saved as an empty cell).
+    Saved once per session, next to the tracker file:
+        data/<id>_<date>_<time>_posttask.csv
+    """
+    # Q3 shows each feature alone: the image whose row has a 1 only for
+    # that feature, e.g. "100000.png" for the first feature
+    images = []
+    for feature in IMAGE_NAME_ORDER:
+        row = "".join("1" if f == feature else "0" for f in IMAGE_NAME_ORDER)
+        images.append((PATHS["stimDir"] / f"{row}.png",
+                       POSTTASK["q3Labels"][feature]))
+
+    answers = {
+        "q1Pattern": pres.type_long_answer(POSTTASK["q1"], "Question 1 of 4"),
+        "q2Strategy": pres.type_long_answer(POSTTASK["q2"], "Question 2 of 4"),
+    }
+    chosen = pres.choose_images(POSTTASK["q3"], images, "Question 3 of 4")
+    answers["q3Features"] = None if chosen is None else "|".join(chosen)
+    answers["q4Difficulty"] = pres.rate_scale(POSTTASK["q4"], *POSTTASK["q4Ends"],
+                                              progress="Question 4 of 4")
+
+    path = tracker_path.with_name(tracker_path.stem + "_posttask.csv")
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(answers))
+        writer.writeheader()
+        writer.writerow(answers)          # None is written as an empty cell
+    print(f"Post-task answers to {path}")
+    return answers
 
 
 def run_trial(pres, target, trial_n, previous_obj):
@@ -186,26 +220,41 @@ def main():
 
     results = []
     accuracy = {}                     # stays empty if calibration is skipped
+    calibration_attempts = 0          # stays 0 if calibration is skipped
     participant = {"sonaID": "debug", "age": "", "gender": ""}
     try:
         # Inside the try, so Esc during the questions still closes the
         # window and the tracker.
+        pres.show_message(SCREEN_TEXT["greeting"])          # Screen 1
         if SESSION["yesDemographics"]:
-            participant = ask_demographics(pres)
+            participant = ask_demographics(pres)            # Screen 2
         pid = participant["sonaID"]
 
         # From here on the cursor must not be on the stimulus screen.
         pres.park_mouse()
 
         if SESSION["yesCalibration"]:
-            pres.show_message("Look at each dot until it "
-                              "disappears.\n\nPress space to begin.")
-
-            accuracy = calibrate.gaze_calibration(pres.win)
-            if not calibrate.report_calibration(pres, accuracy):
-                # In the real experiment this is where you would recalibrate,
-                # and the numbers would go to the experimenter only.
-                print("Calibration did not meet criterion -- continuing anyway.")
+            # Repeat until both eyes pass. After a failure the participant
+            # sees a waiting screen (4b) and the researcher chooses in the
+            # terminal: R recalibrates, Esc ends the session. No limit on
+            # attempts; the count is shown in the terminal and saved.
+            while True:
+                calibration_attempts += 1
+                pres.show_message(SCREEN_TEXT["calibration"])   # Screen 3
+                accuracy = calibrate.gaze_calibration(pres.win)
+                if calibrate.report_calibration(pres, accuracy,
+                                                calibration_attempts):
+                    print(f"PASSED on attempt {calibration_attempts}.")
+                    break
+                pres.message.text = SCREEN_TEXT["calibrationWait"]  # Screen 4b
+                pres.message.draw()
+                pres.flip()
+                print(f"FAILED (attempt {calibration_attempts}). Adjust the "
+                      "camera or the participant, then press R to recalibrate, "
+                      "or Esc to end the session.")
+                if event.waitKeys(keyList=["r", "escape"])[0] == "escape":
+                    raise QuitRequested("ended after failed calibration")
+            pres.show_message(SCREEN_TEXT["calibrationDone"])   # Screen 4
 
         # From here gaze comes back as GazeX/GazeY in screen pixels centred
         # at 0,0 -- the same frame the responders use -- because the
@@ -231,7 +280,8 @@ def main():
         session = trialdata.session_columns(
             participant, accuracy,
             datetime.now().isoformat(timespec="seconds"),
-            screen_rate, tracker_rate, tracked_eyes, pres.ring_order, seed)
+            screen_rate, tracker_rate, tracked_eyes, pres.ring_order, seed,
+            calibration_attempts)
         print(f"Trials to {trialdata.open_file(path, session)}")
 
         # One marker for everything known at the start. Markers sent close
@@ -243,17 +293,23 @@ def main():
                       ring_order="|".join(pres.ring_order), seed=seed,
                       **calibration)
 
-        pres.show_message("Look at the central dot until an object appears.\n\n"
-                          "Then look at the name that belongs to it, \n\n"
-                          "and keep looking at it to make your choice.\n\n"
-                          "Press space to start. Press Esc to end the session.")
+        pres.show_message(SCREEN_TEXT["task"])               # Screen 5
         previous_obj = None               # trial 1 has no prime
         for trial_n, target in enumerate(sequence, start=1):
             row = run_trial(pres, target, trial_n, previous_obj)
             trialdata.write_row(session, row)
             results.append(row)
             previous_obj = target
+        eventlog.mark("trials_end")
+        posttask_q(pres, path)
         eventlog.mark("session_end")
+        # After session_end: the data are complete, so leaving the letter
+        # early with Esc is not an abort
+        pres.show_debrief()                                 # Screens 13-14
+        try:
+            pres.show_message(SCREEN_TEXT["endOfStudy"])    # Screen 15
+        except QuitRequested:
+            pass                    # data are saved; Esc just closes
     except response.FixationTimeout as e:
         eventlog.mark("session_aborted", reason="fixation_timeout")
         print(f"\nABORTED: {e}")

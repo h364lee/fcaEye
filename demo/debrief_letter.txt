@@ -1,0 +1,41 @@
+# Paragraphs are separated by an empty line. A paragraph starting with
+# "# " is the title, one starting with "## " a section heading.
+# Lines starting with "# " before the title are notes and are not shown.
+
+# Feedback Letter for REG Participants
+Learning How Concepts Are Related: Eye-Tracking Study
+
+Student Investigator: Caleb Lee (h364lee@uwaterloo.ca), School of Psychology
+Faculty Supervisor: Dr. Britt Anderson (519-888-4567 x43056), School of Psychology.
+
+Thank you for your participation in this study and for spending the time to help us with our research.
+
+## Study design
+
+This study was based on a branch of applied mathematics called Formal Concept Analysis or FCA (Ganter & Wille, 1999). FCA starts from a table that lists objects, their attributes, and which object has which attribute. From this table, FCA finds concepts, which are defined as groups of objects and the attributes that they all share. These concepts can be ordered from general to specific. The organization shows a relationship in which a more general concept contains more objects that share fewer attributes, and a more specific concept contains fewer objects that share more attributes. This ordering is called a concept lattice.
+
+The shapes you saw differed in visual attributes, such as colour, pattern, and outline. Every shape had the same number of attributes. The pattern of which shape had which attribute created the categories (formal concepts) you learned, and some categories were contained inside more general ones. For example, the shapes that had two particular attributes formed a category inside the larger category of shapes that had just one of those attributes.
+
+On each trial, you saw an item in the centre of the screen and were asked to look at the matching name among several arranged in a ring around it. The shape on the next trial was either related to the shape on the previous trial or not related. Participants were randomly assigned to groups that differed in how the categories were organized. In the second part of the study, you learned a new set of shapes, organized either in the same way as the first part or in a different way.
+
+Researchers have long debated whether people store concepts in a general-to-specific order, or whether this order is only a side effect of shared attributes (e.g., Collins & Quillian, 1969). In everyday concepts, the two usually go together. Our design separates them. The number of attributes two shapes share is the same in both directions. An order is not: if one category contains another, the reverse is not true. So, if people represent this order, the direction between two related categories should matter. We expected this to show in the order in which related shapes appeared in the trials.
+
+We tested this in three ways. First, we expected that how quickly your eyes moved to a name would depend on how the shape on the previous trial was related to the shape on the current trial. Seeing one item can change how fast you respond to the next item. This is called priming. Second, we expected that when you chose the wrong name, you would more often choose the name of a shape from a related category than from an unrelated one. Third, in the second part of the study, we expected faster learning when the new shapes followed the same organization as the first part.
+
+## Anonymity/Confidentiality
+
+Data in this study will be used for research purposes only. Your data will be stored under a randomly generated participant ID; your SONA ID is only used to award a credit for your participation. A separate form linking your SONA ID to this participant ID is kept separate from the research data and is never shared or published with the data. I would like to remind you that your identity will not appear in any report, publication, or presentation resulting from the study. Data collected during this study will be maintained for a minimum of 7 years on secure University of Waterloo Servers or as needed, on encrypted external drives.
+
+In this locked lab, your electronic data will be kept on a password-protected computer, to which only researchers associated with this study have access. De-identified data may also be submitted to a journal, shared according to principles of open science (e.g. on OSF), or deposited in online public repositories to support our federal granting agency's policy on open data and will be presented in aggregate form only in publications.
+
+In the future, should you be interested in the outcome of this study, or the reasons for conducting the study in general, please contact Caleb Lee by email at h364lee@uwaterloo.ca or Britt Anderson at britt@uwaterloo.ca.
+
+As a reminder, this study has been reviewed and received ethics clearance through a University of Waterloo Research Ethics Board (REB #48927). If you have questions for the Board, contact the Office of Research Ethics, toll-free at 1-833-643-2379 (Canada and USA), 1-519-888-4440, or reb@uwaterloo.ca. If you have any questions for the researchers, contact Caleb Lee (h364lee@uwaterloo.ca) or Britt Anderson (britt@uwaterloo.ca). Your participation is very much appreciated, and it is our hope that this experience has been informative for you.
+
+## For Further Reading
+
+You may be interested in these citations:
+
+Wille, R. (2005). Formal concept analysis as mathematical theory of concepts and concept hierarchies. In B. Ganter, G. Stumme, & R. Wille (Eds.), Formal concept analysis: Foundations and applications (Lecture Notes in Computer Science, Vol. 3626, pp. 1-33). Springer. https://doi.org/10.1007/11528784_1
+
+Collins, A. M., & Quillian, M. R. (1969). Retrieval time from semantic memory. Journal of Verbal Learning and Verbal Behavior, 8(2), 240-247. https://doi.org/10.1016/S0022-5371(69)80069-1

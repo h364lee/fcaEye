@@ -43,7 +43,8 @@ _settings = None
 
 
 def session_columns(participant, accuracy, session_start, screen_rate,
-                    tracker_rate, tracked_eyes, ring_order, seed):
+                    tracker_rate, tracked_eyes, ring_order, seed,
+                    calibration_attempts):
     """Everything that is the same for every trial, except the settings."""
     columns = dict(participant)
     columns.update({
@@ -57,6 +58,7 @@ def session_columns(participant, accuracy, session_start, screen_rate,
         "trackLeft": tracked_eyes[0],
         "trackRight": tracked_eyes[1],
         "yesCalibration": config.SESSION["yesCalibration"],
+        "calibrationAttempts": calibration_attempts,
         "calibrationErrorLeft_deg": accuracy.get("left", {}).get("accuracy_deg", ""),
         "calibrationErrorRight_deg": accuracy.get("right", {}).get("accuracy_deg", ""),
     })

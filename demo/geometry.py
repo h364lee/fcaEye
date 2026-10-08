@@ -72,35 +72,48 @@ def pair_circle_radius():
     return GEOMETRY['feedbackNameOffset_px'] / 2 + GEOMETRY['objSize_px'] / 2
 
 
-def feedback_obj_pos(name_pos):
-    """Where the object goes in feedback: feedbackNameOffset_px from the
-    name, inward along the line to the screen centre.
+def _pair_circle_fits(name_pos, obj_pos):
+    """True if the green circle around this name and object is on screen."""
+    cx = (name_pos[0] + obj_pos[0]) / 2
+    cy = (name_pos[1] + obj_pos[1]) / 2
+    r = pair_circle_radius()
+    half_w, half_h = DISPLAY['size'][0] / 2, DISPLAY['size'][1] / 2
+    return abs(cx) + r <= half_w and abs(cy) + r <= half_h
 
-    Inward rather than above, so the object stays on screen for every slot.
+
+def feedback_obj_pos(name_pos):
+    """Where the object goes in feedback: feedbackNameOffset_px below the
+    name, or the same distance above it if the green circle would not fit
+    on screen below (with the current settings: the bottom slot only).
+
+    Straight below rather than toward the centre: a name is much wider than
+    it is tall, so a sideways offset would put the object over the name.
     """
     x, y = name_pos
-    r = math.hypot(x, y)
-    shrink = (r - GEOMETRY['feedbackNameOffset_px']) / r
-    return (x * shrink, y * shrink)
+    d = GEOMETRY['feedbackNameOffset_px']
+    below = (x, y - d)
+    if _pair_circle_fits(name_pos, below):
+        return below
+    return (x, y + d)
 
 
 def check_feedback_fit():
-    """Stop if the feedback circle can leave the screen.
+    """Stop if the feedback circle can leave the screen at any ring angle.
 
-    The circle's farthest point from the screen centre is its own centre
-    (ring radius minus half the name-object distance) plus its radius. With
-    ringRotation "random" a slot can sit at any angle, so it must fit
-    within the nearer screen edge: half of the shorter screen side.
+    Tries the ring at every whole degree (with ringRotation "random" a name
+    can sit at any angle) and places the object as feedback_obj_pos does.
     """
-    farthest = (GEOMETRY['ringRadius'] - GEOMETRY['feedbackNameOffset_px'] / 2
-                + pair_circle_radius())
-    edge = min(DISPLAY['size']) / 2
-    if farthest > edge:
-        raise ValueError(
-            f"The feedback circle reaches {farthest:.0f} px from the centre, but "
-            f"the screen edge is {edge:.0f} px away. Lower GEOMETRY['ringRadius'] "
-            f"by at least {farthest - edge:.0f} px, or reduce objSize_px or "
-            "feedbackNameOffset_px.")
+    r_ring = GEOMETRY['ringRadius']
+    for deg in range(360):
+        a = math.radians(deg)
+        name_pos = (r_ring * math.cos(a), r_ring * math.sin(a))
+        if not _pair_circle_fits(name_pos, feedback_obj_pos(name_pos)):
+            raise ValueError(
+                f"At {deg} deg on the ring the feedback circle (radius "
+                f"{pair_circle_radius():.0f} px) leaves the "
+                f"{DISPLAY['size'][0]}x{DISPLAY['size'][1]} screen. Lower "
+                "GEOMETRY['ringRadius'], or reduce objSize_px or "
+                "feedbackNameOffset_px.")
 
 
 def adjacent_gap():
