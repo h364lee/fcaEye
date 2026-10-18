@@ -13,7 +13,7 @@ import numpy as np
 from psychopy import visual
 
 from config import CALIBRATION, DISPLAY
-from presentation import check_quit
+from presentation import check_escape
 
 
 def gaze_calibration(win):
@@ -91,7 +91,7 @@ def gaze_calibration(win):
         t0 = time.time()
 
         while True:
-            check_quit()
+            check_escape()
             elapsed = time.time() - t0
             d = LiveTrack.GetBufferedEyePositions(0, fix_dur_samples, 0)
 

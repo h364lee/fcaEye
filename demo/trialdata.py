@@ -14,10 +14,11 @@ from importlib.metadata import version
 
 import config
 import design
-from config import NAMES
+from config import NAMES, OBJECT_SETS
 
 # Settings groups copied into the file, one column per key, as "GROUP.key".
-SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "ORDER", "EULER_TOUR",
+SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "ORDER", "EULER_TOUR", "PHASES",
+            "COUNTERBALANCE", "DEMO_TRIALS",
             "DWELL_SELECTION", "CENTRAL_FIXATION", "CALIBRATION"]
 
 # Marker name -> column holding the PsychoPy time (s) the marker was written.
@@ -43,10 +44,18 @@ _settings = None
 
 
 def session_columns(participant, accuracy, session_start, screen_rate,
-                    tracker_rate, tracked_eyes, ring_order, seed,
+                    tracker_rate, tracked_eyes, stim_sets,
                     calibration_attempts):
-    """Everything that is the same for every trial, except the settings."""
+    """Everything that is the same for every trial, except the settings.
+
+    stim_sets: the design.StimulusSets this session uses. Each gets its
+    own columns, e.g. "phase1_context", "phase1_g0Name".
+    """
     columns = dict(participant)
+    columns.update({
+        "groupCell": config.COUNTERBALANCE["groupCell"],
+        "phase2Relation": design.phase2_relation(),     # isom or shift
+    })
     columns.update({
         "sessionStart": session_start,
         # Software that ran this session, to trace version differences later
@@ -62,14 +71,19 @@ def session_columns(participant, accuracy, session_start, screen_rate,
         "calibrationErrorLeft_deg": accuracy.get("left", {}).get("accuracy_deg", ""),
         "calibrationErrorRight_deg": accuracy.get("right", {}).get("accuracy_deg", ""),
     })
-    for obj in NAMES:
-        columns[f"{obj}Name"] = NAMES[obj]
-    columns["attributes"] = design.attributes_text()
-    for obj in NAMES:
-        columns[f"{obj}Image"] = design.image_code(obj)
-    columns["ringOrder"] = "|".join(ring_order)
-    # design.trial_sequence(seed) rebuilds this session's trial order
-    columns["seed"] = seed
+    for stim_set in stim_sets:
+        label = stim_set.label
+        if stim_set.context is not None:
+            columns[f"{label}_context"] = stim_set.context_label
+            columns[f"{label}_objectSet"] = stim_set.object_set
+            columns[f"{label}_attributes"] = design.attributes_text(
+                OBJECT_SETS[stim_set.object_set]["attributes"])
+        for obj in stim_set.objects:
+            columns[f"{label}_{obj}Name"] = stim_set.names[obj]
+        if stim_set.context is not None:
+            for obj in stim_set.objects:
+                columns[f"{label}_{obj}Image"] = stim_set.image_code(obj)
+        columns[f"{label}_ringOrder"] = "|".join(stim_set.ring_order)
     return columns
 
 
@@ -84,7 +98,14 @@ def settings_columns():
 
 def trial_column_names():
     """Column names of the dict run_trial returns, in file order."""
-    names = ["trialN", "targetObj", "previousObj", "name", "targetImage",
+    # phase: practice, learning1, test1, learning2, test2
+    # stimSet: practice, phase1 or phase2 (the design table's phases)
+    # attempt: 1, or 2+ if the block was abandoned (pause screen) and run
+    #   again; keep the last attempt of each block.
+    # blockSeed: rebuilds the block's trial order (design.shuffled_sequence
+    #   for practice and learning, design.trial_sequence for test)
+    names = ["phase", "block", "attempt", "stimSet", "blockSeed", "feedback",
+             "trialN", "targetObj", "previousObj", "name", "targetImage",
              "rotation_deg"]
     for obj in NAMES:
         names += [f"{obj}X", f"{obj}Y"]

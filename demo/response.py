@@ -12,7 +12,7 @@ import LiveTrack
 
 import geometry
 from config import CENTRAL_FIXATION, DWELL_SELECTION, GEOMETRY
-from presentation import check_quit
+from presentation import check_escape
 
 import math
 from psychopy import core
@@ -85,7 +85,7 @@ def wait_for_central_fixation(pres, hold_s, positions=None):
                 f"within the {timeout_s} s limit"
             )
 
-        check_quit()
+        check_escape()
         pos = newest_tracked()
 
         if pos is None:

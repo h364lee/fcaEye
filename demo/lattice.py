@@ -2,7 +2,7 @@ from pathlib import Path
 
 from concepts import Context
 
-from context import CONTEXT
+from config import CONTEXT
 
 
 def mk_formal_context(context):

@@ -1,6 +1,6 @@
 """Check that design.trial_sequence gives pair-balanced sequences.
 
-Run after any change to the sequence code, context.py, or EULER_TOUR:
+Run after any change to the sequence code, the contexts, or EULER_TOUR (config.py):
     python test_euler_tour.py
 
 No window, no tracker. The Euler tour should balance every sequence by
@@ -12,7 +12,7 @@ import random
 from collections import Counter
 
 from config import EULER_TOUR
-from context import CONTEXT
+from config import CONTEXT
 from design import trial_sequence
 
 
