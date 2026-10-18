@@ -226,7 +226,27 @@ class Presentation:
         # order come from the stimulus set in use. phase1 until use_set() is
         # called.
         self._built_sets = {}
-        self.use_set(design.stimulus_sets()["phase1"])
+        sets = design.stimulus_sets()
+        for stim_set in sets.values():   # build every set once, to measure it
+            self.use_set(stim_set)
+        self.use_set(sets["phase1"])
+
+        # Selection circle around each name: one radius for the whole
+        # session, from the widest name of all sets (practice, phase 1,
+        # phase 2), so the selection rule is the same in every phase.
+        # Measured here because a name's size on screen (boundingBox:
+        # width, height in px) is only known once its text exists.
+        sizes = [text.boundingBox
+                 for _, name_texts in self._built_sets.values()
+                 for text in name_texts.values()]
+        self.name_radius_px = geometry.name_select_radius_px(sizes)
+        print(f"Name selection radius: {self.name_radius_px:.0f} px "
+              f"({self.name_radius_px / geometry.px_per_deg():.2f} deg)")
+        try:
+            geometry.check_tolerance(self.name_radius_px)
+        except ValueError:
+            self.win.close()
+            raise
 
         self._build_page()
         self._mouse_parked = False      # set by park_mouse
