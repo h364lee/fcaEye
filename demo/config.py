@@ -1,15 +1,15 @@
 """
 All parameters are stored here.
 Outline:
-     1. SESSION SWITCHES     parts on or off for testing; demo trial counts
-     2. COUNTERBALANCING     group cell for this session; the design table
-     3. SESSION STRUCTURE    practice length, learning criterion, test length
-     4. TRIAL TIMING         preview, feedback, blank interval, timeout
-     5. GAZE                 central fixation, dwell selection, calibration
-     6. SCREEN AND LAYOUT    display, ring and feedback geometry
-     7. FILES                folders and files the experiment reads
-     8. STIMULI              formal contexts, names, visual features, ring order
-     9. TEXT                 everything participants read
+     1. SESSION
+     2. COUNTERBALANCING    
+     3. SESSION STRUCTURE    
+     4. TRIAL TIMING         
+     5. GAZE                 
+     6. SCREEN AND LAYOUT    
+     7. FILES               
+     8. STIMULI              
+     9. TEXT                 
     10. LOOK OF TEXT SCREENS fonts and colours
 
 Names: g0-g7 are objects, m0-m5 attributes
@@ -18,47 +18,39 @@ Names: g0-g7 are objects, m0-m5 attributes
 from pathlib import Path
 
 # ==========================================================================
-# 1. SESSION SWITCHES
+# 1. SESSION
 # ==========================================================================
 
 SESSION = {
     "yesDemographics": True,     
-    "yesCalibration": False,     
+    "yesCalibration": True,     
 }
 
-# TEMPORARY, for demos: cut every block of a stage to this many trials.
-# None = full length. The criterion still needs learnCriterionBlocks
-# blocks (section 3), so lower that too for a short demo. Saved in the
-# trial file.
+# trial numbers for demo
 DEMO_TRIALS = {
     "practice": 3,       # e.g. 3
-    "learning": 3,       # per learning block, e.g. 4
-    "test": 3,           # per test block, e.g. 5
+    "learning": 4,       # per learning block, e.g. 4
+    "test": 5,           # per test block, e.g. 5
 }
 
 # ==========================================================================
 # 2. COUNTERBALANCING
-# Set group cell
 # ==========================================================================
 
 COUNTERBALANCE = {
     "groupCell": 1,                 # a row of GROUP_CELLS
 }
 
-# The design table, one row per group cell.
-# Each phase: (context in CONTEXTS, object set in OBJECT_SETS; section 8).
-# Same context in both phases = "isom"; different = "shift".
-# 2 x 2 x 2: phase-1 context x isom/shift x which set comes first.
 GROUP_CELLS = {
     #    phase 1     phase 2
-    1: [("M3", 1), ("M3", 2)],     # isom
-    2: [("M3", 1), ("N5", 2)],     # shift
-    3: [("N5", 1), ("N5", 2)],     # isom
-    4: [("N5", 1), ("M3", 2)],     # shift
-    5: [("M3", 2), ("M3", 1)],     # isom
-    6: [("M3", 2), ("N5", 1)],     # shift
-    7: [("N5", 2), ("N5", 1)],     # isom
-    8: [("N5", 2), ("M3", 1)],     # shift
+    1: [("C1", 1), ("C1", 2)],     # isom
+    2: [("C1", 1), ("C2", 2)],     # shift
+    3: [("C2", 1), ("C2", 2)],     # isom
+    4: [("C2", 1), ("C1", 2)],     # shift
+    5: [("C1", 2), ("C1", 1)],     # isom
+    6: [("C1", 2), ("C2", 1)],     # shift
+    7: [("C2", 2), ("C2", 1)],     # isom
+    8: [("C2", 2), ("C1", 1)],     # shift
 }
 
 
@@ -68,12 +60,14 @@ GROUP_CELLS = {
 # ==========================================================================
 
 PHASES = {
-    "practiceTrials": 8,           # placeholder objects, with feedback
+    "practiceTrials": 1,           # trials per practice round (a random
+                                   # practice shape); after each round the
+                                   # participant chooses: again, or move on
     "learnBlockTrials": 32,        # each object equally often, random order;
                                    # must be a multiple of the object count
-    "learnCriterion": 0.9,         # proportion correct in one block; a timeout
+    "learnCriterion": 0.25,         # proportion correct in one block; a timeout
                                    # counts as not correct. 29/32 passes, 28/32 not
-    "learnCriterionBlocks": 3,     # consecutive blocks at or above the criterion
+    "learnCriterionBlocks": 1,     # consecutive blocks at or above the criterion
     "learnMaxBlocks": 10,          # criterion not met by then -> session ends
                                    # (abandoned blocks do not count)
 }
@@ -92,7 +86,7 @@ EULER_TOUR = {
 
 # ==========================================================================
 # 4. TRIAL TIMING
-#    Seconds, unless the name says otherwise.
+#    in seconds (unless the name says different)
 # ==========================================================================
 
 TIMING = {
@@ -111,7 +105,7 @@ TIMING = {
 # Central fixation before each cue
 CENTRAL_FIXATION = {
     "centralHold_ms": 2000,      # how long gaze must stay inside the radius
-    "centralRadius_deg": 1.25,   # distance from screen centre that counts as on the dot
+    "centralRadius_deg": 2,   # distance from screen centre that counts as on the dot
     "centralTimeout_s": 20,      # give up and abort the session
 }
 
@@ -163,8 +157,8 @@ GEOMETRY = {
     "nameSelectMargin_deg": 1.0,     # selection circle around each name:
                                      # radius = centre-to-corner distance of the
                                      # widest name + this value.
-    "feedbackCircleRadius_px": 55,   # size of the mark on a wrong name ("x" or "o")
-    "feedbackWrongMark": "x",        # mark on a wrong choice: "x" or "o"
+    "feedbackWrongMark": "x",        # mark on a wrong choice: "x" or "o";
+                                     # same size as the green circle
     "feedbackNameOffset_px": 70,     # name centre to object centre in feedback;
                                      # the object goes below the name (above it
                                      # where the circle would not fit, e.g. the
@@ -210,13 +204,13 @@ CONTEXT = {
     "g7": [0, 1, 1, 0, 1, 0],
 }
 
-# SCAFFOLD for the second context (N5 below). Copied from CONTEXT;
+# SCAFFOLD for the second context (C2 below). Copied from CONTEXT;
 # replace with the second context.
 CONTEXT_2 = {obj: list(row) for obj, row in CONTEXT.items()}
 
 # By label, as GROUP_CELLS (section 2) names them. The labels follow the
 # design table; the contents are placeholders until the final contexts exist.
-CONTEXTS = {"M3": CONTEXT, "N5": CONTEXT_2}
+CONTEXTS = {"C1": CONTEXT, "C2": CONTEXT_2}
 
 # Which visual feature stands for each attribute, and what 0 and 1 mean.
 # stimuli.py refers to this.
@@ -259,8 +253,7 @@ NAMES_B = {
     "g7": "Zeli",
 }
 
-# PLACEHOLDER practice names. The practice objects are plain white circles,
-# so there is nothing to learn: the practice only teaches gaze selection.
+# PLACEHOLDER practice names, one per practice object below.
 PRACTICE_NAMES = {
     "g0": "Dada",
     "g1": "Fifi",
@@ -270,6 +263,26 @@ PRACTICE_NAMES = {
     "g5": "Sasa",
     "g6": "Tete",
     "g7": "Vava",
+}
+
+# Practice objects: 2 x 2 x 2 = 8, one per name, drawn as plain shapes.
+# PLACEHOLDER pairing of names and objects.
+#   (colour: "white"/"black", shape: "square"/"triangle", size: "big"/"small")
+PRACTICE_OBJECTS = {
+    "g0": ("white", "square", "big"),
+    "g1": ("white", "square", "small"),
+    "g2": ("white", "triangle", "big"),
+    "g3": ("white", "triangle", "small"),
+    "g4": ("black", "square", "big"),
+    "g5": ("black", "square", "small"),
+    "g6": ("black", "triangle", "big"),
+    "g7": ("black", "triangle", "small"),
+}
+PRACTICE_SIZES = {
+    "bigWidth_px": 90,      # big square's side = the real objects' square
+                            # (75% of GEOMETRY["objSize_px"]); a triangle
+                            # fills the same box (base and height)
+    "smallScale": 0.6,      # small = 60% of big, in width
 }
 
 # Object sets: how a context's objects look and what they are called.
@@ -300,21 +313,27 @@ ORDER = {
 #    Everything participants read.
 # ==========================================================================
 
-# Same wording as the Instructions document submitted for ethics review
-# (ethicsApp/fcaEyeInstructions); change both together.
-# Screens that only show text are lists of pages: (title, body). The
-# participant moves with the arrow keys: right = next, left = back; the
-# page footer shows the keys (NAV_TEXT).
+# Revised after the ethics submission (Oct 2026): check whether the ethics
+# documents need the same changes.
+# Screens that only show text are lists of pages: (title, body). Text starts
+# at the left; a page with no title ("") shows its text in the vertical
+# middle of the screen. The participant moves with the arrow keys: right = next,
+# left = back; the page footer shows the keys (NAV_TEXT).
 SCREEN_TEXT = {
     # Screen 1
     "greeting": [
         ("Welcome",
          "Welcome and thank you for taking part in this study.\n\n"
          "In this experiment, you will learn made-up names for visual "
-         "objects. You will choose names by looking at them, and an eye "
-         "tracker will record where you look.\n\n"
+         "shapes. You will choose names by looking at them, and an eye "
+         "tracker will record where you look.",
+         # third part as text: a small grey note above the footer line
+         "Use the arrow keys to move through the instructions: "
+         "\u2192 for next, \u2190 for back."),
+        ("Welcome",
          "If you want to stop at any time, press Esc or let the "
-         "researcher know."),
+         "researcher know.\n\n"
+         "We will ask you a few demographic questions first."),
     ],
     # Screen 2: (question, hint under the box)
     "sonaId": ("What is your SONA ID?", "6 digits"),
@@ -322,6 +341,37 @@ SCREEN_TEXT = {
             "You may skip this question: press Enter without typing"),
     "gender": "What is your gender?",
     "selfDescribe": "Please describe your gender",
+    # Screen 5 (before calibration). A page may have a third part: pictures
+    # of the trial screen, drawn small under the text, each as
+    # (picture, caption). Pictures: "dot", "names", "cue", "correct",
+    # "incorrect" (presentation.TRIAL_PICTURES). They use the practice
+    # objects and names, so they show nothing that is learned later.
+    "task": [
+        ("Instruction",
+         "On each trial, a dot appears at the centre of the screen. Look at "
+         "the dot and hold your gaze on it.",
+         [("dot", "")]),
+        ("Instruction",
+         "After a moment, several names will appear in a ring around the dot. "
+         "Keep holding your gaze on the central dot until it changes into "
+         "a shape.",
+         [("names", "")]),
+        ("Instruction",
+         "One of the names belongs to the shape. "
+         "Once a shape replaces the dot, look at the name that belongs to "
+         "the shape and keep looking at it to make your choice. "
+         "Once you hold your gaze at your chosen name long enough, your "
+         "selection will be confirmed.",
+         [("cue", "")]),
+        ("Instruction",
+         "After each choice, the shape appears next to its CORRECT name, "
+         "with a green circle around them. "
+         "If your choice was INCORRECT, a red X marks the name you chose.",
+         [("correct", "Correct"), ("incorrect", "Incorrect")]),
+        ("Instruction",
+         "Before the task starts, you will go through calibration of the "
+         "eye tracker."),
+    ],
     # Screen 3
     "calibration": [
         ("Calibration",
@@ -331,82 +381,75 @@ SCREEN_TEXT = {
          "directly at each dot until it disappears.\n\n"
          "Please keep your head still on the chin rest."),
     ],
-    # Screen 4: both eyes passed
-    "calibrationDone": [("Calibration complete", "Calibration is complete.")],
-    # Screen 4b: a calibration failed; the researcher recalibrates (R) or
-    # ends (Esc). Shown without the footer: the participant does nothing.
-    "calibrationWait": [
-        ("Please wait",
-         "Please wait while the researcher adjusts the eye tracker."),
-    ],
-    # Screen 5
-    "task": [
-        ("Welcome to the task!",
-         "On each trial, a dot appears at the centre of the screen. Look at "
-         "the dot and hold.\n\n"
-         "After a moment, several names will appear in a ring around it. "
-         "Keep holding your gaze on the central dot until it changes into a "
-         "shape."),
-        ("Choosing a name",
-         "Once a shape replaces the dot, look at the name that belongs to "
-         "the shape and keep looking at it to make your choice.\n\n"
-         "Once you hold your gaze at your chosen name long enough, your "
-         "selection will be confirmed."),
-        ("Feedback",
-         "After each choice, the shape appears next to its CORRECT name, "
-         "with a green circle around them.\n\n"
-         "If your choice was INCORRECT, a red circle marks the name you "
-         "chose."),
-        ("Ready?",
-         "Please choose as quickly and accurately as you can."),
+    # Screen 4: both eyes passed. A page with no title ("") shows its text
+    # in the middle of the screen.
+    "calibrationDone": [("", "Calibration was successful.")],
+    # After an attempt that failed; the calibration then runs again
+    "calibrationFailed": [
+        ("", "Calibration was not successful. We will do it again."),
     ],
     # PLACEHOLDER: before the practice trials
     "practice": [
-        ("Practice (placeholder text)",
-         "You will first practise choosing names with your eyes. The shapes "
-         "in this practice are all the same, so any name can be chosen."),
+        ("Practice",
+         "You will first practise choosing names with your eyes, with a "
+         "small set of simple shapes.\n\n"
+         "After each practice trial, you can choose to practise again or "
+         "move on to the task."),
     ],
-    # PLACEHOLDER: before learning 2
-    "learning2": [
-        ("Second half (placeholder text)",
-         "You will now learn names again."),
+    # After each practice trial. Keys: Space = again, right arrow = move on
+    "practiceChoice": [
+        ("", "Press Space to practise again.\n\n"
+             "Press \u2192 to move on to the task."),
     ],
-    # Screens 6-8
+    # Screens 6-8: before learning 1, after the practice
     "learning": [
         ("Learning",
-         "You will learn the names of a new set of shapes.\n\n"
-         "At first, you will need to guess. After each choice, you will "
-         "see whether you were correct. Use the feedback to learn which "
-         "name belongs to each shape.\n\n"
-         "Training continues in rounds until you choose correctly most "
-         "of the time."),
+         "Now you are moving on to the real task.\n\n"
+         "You will learn the names of a new set of shapes. At first, you'll "
+         "need to guess. After each choice, you will see whether you "
+         "were correct. Use the feedback to learn which name belongs to "
+         "each shape.\n\n"
+         "Learning continues in rounds until you choose correctly most of "
+         "the time. Please choose as quickly and accurately as you can."),
     ],
-    # {round} and {percent} are filled in by experiment.run_learning
+    # After each learning round. {round}, {percent} and {next} are filled
+    # in by experiment.run_learning; {next} is one of "roundEndNext".
     "roundEnd": [
-        ("End of round {round}",
-         "You chose the correct name on {percent}% of trials."),
+        ("", "You chose the correct name on {percent}% of trials in round "
+             "{round}.\n\n"
+             "Press \u2192 to move on to {next}."),
     ],
+    "roundEndNext": {
+        "round": "the next round",      # criterion not met yet
+        "test": "the test",             # criterion met
+        "end": "the end of this part",  # last round, criterion not met
+    },
     "test": [
         ("Test",
          "Now you will be tested on the names you learned.\n\n"
          "The task is the same as before, but you will not be given "
          "feedback whether your choices are correct."),
     ],
-    # Screen 13 (screens 9-12 are POSTTASK below; screen 14 is the letter)
+    # Before learning 2
+    "learning2": [
+        ("Learning",
+         "You will now learn another new set of shapes with new names."),
+    ],
+    # After test 2, before the post-task questions
+    "taskEnd": [
+        ("", "You have finished the task.\n\n"
+             "We will ask a few optional questions about your experience."),
+    ],
+    # Screen 13 (screens 9-12 are POSTTASK below; screen 14 is the letter,
+    # and the session ends when the participant leaves it)
     "thankYou": [
         ("Thank you for your participation!",
-         "Please continue to the debrief form."),
+         "Please read the debrief form on the next pages.\n\n"
+         "When you have finished, please let the researcher know."),
     ],
-    # Shown before an abandoned block starts again
+    # Shown before an abandoned round starts again
     "blockRestart": [
-        ("Starting again",
-         "The block will start again from the beginning."),
-    ],
-    # Screen 15
-    "endOfStudy": [
-        ("The study is complete",
-         "Thank you again for taking part.\n\n"
-         "Please let the researcher know that you have finished."),
+        ("", "The round will start again from the beginning."),
     ],
     # Pause screen (Esc). The researcher clicks one of PAUSE_BUTTONS.
     "pause": [("Paused", "Please call the researcher.")],
@@ -426,6 +469,7 @@ NAV_TEXT = {"back": "\u2190  Back", "next": "Next  \u2192",
 PAUSE_BUTTONS = {
     "continue": "Continue",
     "recalibrate": "Recalibrate",
+    "skip": "Skip to next section",
     "end": "End session",
     "back": "Go back",
     "endConfirm": "Yes, end the session",
@@ -446,7 +490,7 @@ GENDER_OPTIONS = [
 # questions do not cue later ones.
 POSTTASK = {
     "q1": "Did you notice any pattern? If yes, please describe it.",
-    "q2": "Did you use any particular way of remembering the object-name pairs?",
+    "q2": "Did you use any particular way of remembering the shape-name pairs?",
     "q3": "Which visual feature(s) stood out the most?",
     # label under each feature image, in IMAGE_NAME_ORDER's feature names
     "q3Labels": {"colour": "Colour", "stripes": "Stripes", "outline": "Outline",
@@ -484,4 +528,8 @@ PAGE_STYLE = {
     "box": "#FFFFFF",               # typing boxes and answer options
     "boxLine": "#BDB8AE",           # their edges
     "chosen": "#DCE7EE",            # a chosen option
+    "pictureScale": 0.28,           # trial pictures: size of the real screen
+                                    # (two side by side shrink to fit)
+    "pictureNameHeight": 13,        # names in pictures, px (larger than to
+                                    # scale, so they stay readable)
 }

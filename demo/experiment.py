@@ -39,7 +39,7 @@ from config import (CENTRAL_FIXATION, COUNTERBALANCE, DEMO_TRIALS,
                     IMAGE_NAME_ORDER, PATHS, PHASES, POSTTASK, SCREEN_TEXT,
                     SESSION, TIMING)
 from presentation import (EndSession, Presentation, RestartBlock,
-                          check_escape, set_trials_running)
+                          SkipSection, check_escape, set_trials_running)
 
 
 def ask_demographics(pres):
@@ -250,6 +250,7 @@ def run_block(pres, session, block_info, targets, feedback):
     eventlog.mark("block_start", **block_info)
     rows = []
     previous_obj = None                 # first trial of a block has no prime
+    pres.park_mouse()                   # cursor off the participant's screen
     set_trials_running(True)
     try:
         for target in targets:
@@ -306,12 +307,29 @@ def run_block_until_done(pres, session, phase, block_n, stim_set,
 
 
 def run_practice(pres, session, stim_set):
-    """One block of placeholder trials, to learn the gaze selection."""
-    run_block_until_done(
-        pres, session, "practice", 1, stim_set,
-        lambda seed: demo_cut(design.shuffled_sequence(
-            seed, stim_set.objects, PHASES["practiceTrials"]), "practice"),
-        feedback=True)
+    """Practice rounds of PHASES["practiceTrials"] trials. After each round
+    the participant chooses: Space = practise again, right arrow = move on.
+    "Skip to next section" on the pause screen also ends the practice."""
+    round_n = 0
+    try:
+        while True:
+            round_n += 1
+            run_block_until_done(
+                pres, session, "practice", round_n, stim_set,
+                lambda seed: demo_cut(design.shuffled_sequence(
+                    seed, stim_set.objects, PHASES["practiceTrials"]),
+                    "practice"),
+                feedback=True)
+            key = pres.show_choice(SCREEN_TEXT["practiceChoice"],
+                                   ["space", "right"])
+            again = key == "space"
+            eventlog.mark("practice_choice", round=round_n,
+                          choice="again" if again else "move_on")
+            if not again:
+                return
+    except SkipSection:
+        eventlog.mark("section_skipped", phase="practice")
+        print("Practice skipped by the researcher.")
 
 
 def run_learning(pres, session, phase, stim_set):
@@ -322,47 +340,67 @@ def run_learning(pres, session, phase, stim_set):
     An abandoned block sets the count back to 0.
     Not met within PHASES["learnMaxBlocks"] blocks -> EndSession, so the
     participant goes to the debrief.
+    "Skip to next section" on the pause screen ends learning at once.
     """
-    in_a_row = 0
-    for block_n in range(1, PHASES["learnMaxBlocks"] + 1):
-        rows, restarted = run_block_until_done(
-            pres, session, phase, block_n, stim_set,
-            lambda seed: demo_cut(design.shuffled_sequence(
-                seed, stim_set.objects, PHASES["learnBlockTrials"]),
-                "learning"),
-            feedback=True)
-        if restarted:
-            in_a_row = 0
+    try:
+        in_a_row = 0
+        for block_n in range(1, PHASES["learnMaxBlocks"] + 1):
+            rows, restarted = run_block_until_done(
+                pres, session, phase, block_n, stim_set,
+                lambda seed: demo_cut(design.shuffled_sequence(
+                    seed, stim_set.objects, PHASES["learnBlockTrials"]),
+                    "learning"),
+                feedback=True)
+            if restarted:
+                in_a_row = 0
 
-        n_correct = sum(row["outcome"] == "correct" for row in rows)
-        proportion = n_correct / len(rows)
-        if proportion >= PHASES["learnCriterion"]:
-            in_a_row += 1
-        else:
-            in_a_row = 0
-        print(f"{phase} block {block_n}: {n_correct}/{len(rows)} correct, "
-              f"{in_a_row} in a row at criterion")
-        pres.show_pages(SCREEN_TEXT["roundEnd"],
-                        fill={"round": block_n,
-                              "percent": round(100 * proportion)})
+            n_correct = sum(row["outcome"] == "correct" for row in rows)
+            proportion = n_correct / len(rows)
+            if proportion >= PHASES["learnCriterion"]:
+                in_a_row += 1
+            else:
+                in_a_row = 0
+            print(f"{phase} block {block_n}: {n_correct}/{len(rows)} correct, "
+                  f"{in_a_row} in a row at criterion")
+            met = in_a_row >= PHASES["learnCriterionBlocks"]
+            if met:
+                next_part = "test"
+            elif block_n == PHASES["learnMaxBlocks"]:
+                next_part = "end"
+            else:
+                next_part = "round"
+            pres.show_pages(SCREEN_TEXT["roundEnd"],
+                            fill={"round": block_n,
+                                  "percent": round(100 * proportion),
+                                  "next":
+                                      SCREEN_TEXT["roundEndNext"][next_part]})
 
-        if in_a_row >= PHASES["learnCriterionBlocks"]:
-            eventlog.mark("criterion_met", phase=phase, blocks=block_n)
-            return block_n
+            if met:
+                eventlog.mark("criterion_met", phase=phase, blocks=block_n)
+                return block_n
 
-    eventlog.mark("criterion_not_met", phase=phase,
-                  blocks=PHASES["learnMaxBlocks"])
-    raise EndSession(f"{phase}: criterion not met in "
-                     f"{PHASES['learnMaxBlocks']} blocks")
+        eventlog.mark("criterion_not_met", phase=phase,
+                      blocks=PHASES["learnMaxBlocks"])
+        raise EndSession(f"{phase}: criterion not met in "
+                         f"{PHASES['learnMaxBlocks']} blocks")
+    except SkipSection:
+        eventlog.mark("section_skipped", phase=phase)
+        print(f"{phase} skipped by the researcher.")
+        return None
 
 
 def run_test(pres, session, phase, stim_set):
-    """One test block: one Euler tour, no feedback."""
-    run_block_until_done(
-        pres, session, phase, 1, stim_set,
-        lambda seed: demo_cut(design.trial_sequence(seed, stim_set.objects),
-                              "test"),
-        feedback=False)
+    """One test block: one Euler tour, no feedback. "Skip to next section"
+    on the pause screen ends it."""
+    try:
+        run_block_until_done(
+            pres, session, phase, 1, stim_set,
+            lambda seed: demo_cut(design.trial_sequence(seed, stim_set.objects),
+                                  "test"),
+            feedback=False)
+    except SkipSection:
+        eventlog.mark("section_skipped", phase=phase)
+        print(f"{phase} skipped by the researcher.")
 
 
 def run_calibration(pres):
@@ -370,28 +408,24 @@ def run_calibration(pres):
 
     Assumes the tracker is set to raw results and is tracking.
 
-    After a failure the participant sees a waiting screen (4b) and the
-    researcher chooses: R recalibrates, Esc ends the session (EndSession,
-    so the participant still gets the debrief). No limit on attempts; the
-    count is shown in the terminal and saved.
+    The instructions are shown once. After each attempt the participant
+    sees whether it was successful; a failed attempt runs again at once.
+    No limit on attempts; the count is shown in the terminal and saved.
+    The researcher can press Esc for the pause screen (e.g. End session).
     """
+    pres.show_pages(SCREEN_TEXT["calibration"])       # Screen 3
     attempts = 0
     while True:
         attempts += 1
-        pres.show_pages(SCREEN_TEXT["calibration"])   # Screen 3
+        pres.park_mouse()               # cursor off the participant's screen
         accuracy = calibrate.gaze_calibration(pres.win)
         if calibrate.report_calibration(pres, accuracy, attempts):
             print(f"PASSED on attempt {attempts}.")
-            break
-        print(f"FAILED (attempt {attempts}). Adjust the camera or the "
-              "participant, then press R to recalibrate, or Esc to end "
-              "the session.")
-        key = pres.show_waiting(SCREEN_TEXT["calibrationWait"],   # Screen 4b
-                                ["r", "escape"])
-        if key == "escape":
-            raise EndSession("ended after failed calibration")
-    pres.show_pages(SCREEN_TEXT["calibrationDone"])   # Screen 4
-    return accuracy, attempts
+            pres.show_pages(SCREEN_TEXT["calibrationDone"])   # Screen 4
+            return accuracy, attempts
+        print(f"FAILED (attempt {attempts}); running it again. Adjust the "
+              "camera or the participant if needed (Esc: pause screen).")
+        pres.show_pages(SCREEN_TEXT["calibrationFailed"])     # Screen 4b
 
 
 def recalibrate(pres):
@@ -427,14 +461,13 @@ def recalibrate(pres):
 
 
 def show_ending(pres):
-    """Debrief letter and end screen (Screens 13-15).
+    """Thank-you page and debrief letter (Screens 13-14); the session ends
+    when the participant leaves the letter.
 
     Shown after a full session and after End on the pause screen. The data
-    are saved by then, so Esc here only skips ahead: it leaves the letter,
-    and closes the end screen.
+    are saved by then, so Esc here only leaves the letter early.
     """
     pres.show_debrief()
-    pres.show_pages(SCREEN_TEXT["endOfStudy"], escape_exits=True)
 
 
 def main():
@@ -458,7 +491,7 @@ def main():
     test_length = len(design.trial_sequence(1, phase1_set.objects))
     if any(v is not None for v in DEMO_TRIALS.values()):
         print(f"DEMO: blocks cut to {DEMO_TRIALS} (config.DEMO_TRIALS)")
-    print(f"Practice {PHASES['practiceTrials']} trials; learning blocks of "
+    print(f"Practice rounds of {PHASES['practiceTrials']}; learning blocks of "
           f"{PHASES['learnBlockTrials']}; test blocks of {test_length}")
 
     pres = Presentation()
@@ -540,6 +573,7 @@ def main():
         run_test(pres, session, "test2", phase2_set)
 
         eventlog.mark("trials_end")
+        pres.show_pages(SCREEN_TEXT["taskEnd"])
         posttask_q(pres, path)
         eventlog.mark("session_end")
         show_ending(pres)

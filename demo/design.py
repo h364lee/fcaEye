@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from config import (ATTRIBUTES, COUNTERBALANCE, DEMO_TRIALS, EULER_TOUR,
                     GEOMETRY, GROUP_CELLS, IMAGE_NAME_ORDER, NAMES, NAMES_B,
                     OBJECT_SETS, ORDER, PATHS, PHASES, PRACTICE_NAMES,
+                    PRACTICE_OBJECTS,
                     PROJECT_DIR)
 from config import CONTEXT, CONTEXTS
 
@@ -114,14 +115,18 @@ def new_seed():
 
 
 def shuffled_sequence(seed, objects, n_trials):
-    """Each object n_trials / len(objects) times, in random order.
+    """n_trials targets in random order; each object equally often when
+    n_trials is a multiple of the object count (learning blocks), otherwise
+    as close to that as possible (a 1-trial practice round: one random
+    object).
 
-    For learning and practice blocks. A separate random generator, so the
-    seed does not affect other random values (preview jitter, rotation).
+    A separate random generator, so the seed does not affect other random
+    values (preview jitter, rotation).
     """
-    sequence = list(objects) * (n_trials // len(objects))
+    repeats = -(-n_trials // len(objects))          # n / count, rounded up
+    sequence = list(objects) * repeats
     random.Random(seed).shuffle(sequence)
-    return sequence
+    return sequence[:n_trials]
 
 
 def trial_sequence(seed, objects=None):
@@ -218,9 +223,9 @@ def check_design():
         raise ValueError(f"PHASES['learnBlockTrials'] = "
                          f"{PHASES['learnBlockTrials']} must be a multiple of "
                          f"{n_objects}, so each object appears equally often")
-    if PHASES["practiceTrials"] % len(PRACTICE_NAMES) != 0:
-        raise ValueError(f"PHASES['practiceTrials'] must be a multiple of "
-                         f"{len(PRACTICE_NAMES)}")
+    if not isinstance(PHASES["practiceTrials"], int) or PHASES["practiceTrials"] < 1:
+        raise ValueError("PHASES['practiceTrials'] must be a whole number "
+                         f"of 1 or more; it is {PHASES['practiceTrials']!r}")
     if not 0 < PHASES["learnCriterion"] <= 1:
         raise ValueError("PHASES['learnCriterion'] is a proportion, "
                          "between 0 and 1")
@@ -232,6 +237,16 @@ def check_design():
         if limit is not None and (not isinstance(limit, int) or limit < 1):
             raise ValueError(f"DEMO_TRIALS[{stage!r}] must be None or a "
                              f"whole number of 1 or more; it is {limit!r}")
+    if list(PRACTICE_OBJECTS) != list(PRACTICE_NAMES):
+        raise ValueError("PRACTICE_OBJECTS must list the same objects as "
+                         "PRACTICE_NAMES, in the same order")
+    allowed = ({"white", "black"}, {"square", "triangle"}, {"big", "small"})
+    for obj, features in PRACTICE_OBJECTS.items():
+        if len(features) != 3 or any(f not in a for f, a in zip(features, allowed)):
+            raise ValueError(f"PRACTICE_OBJECTS[{obj!r}] = {features}: use "
+                             "(white/black, square/triangle, big/small)")
+    if len(set(PRACTICE_OBJECTS.values())) != len(PRACTICE_OBJECTS):
+        raise ValueError("PRACTICE_OBJECTS: two objects look the same")
     if COUNTERBALANCE["groupCell"] not in GROUP_CELLS:
         raise ValueError(f"COUNTERBALANCE['groupCell'] must be one of "
                          f"{list(GROUP_CELLS)}; it is "

@@ -7,7 +7,8 @@ from psychopy.visual.textbox2 import textbox2 as _tb2
 import design
 import geometry
 from config import (DISPLAY, GEOMETRY, NAV_TEXT, PAGE_STYLE, PATHS,
-                    PAUSE_BUTTONS, SCREEN_TEXT)
+                    PAUSE_BUTTONS, PRACTICE_NAMES, PRACTICE_OBJECTS,
+                    PRACTICE_SIZES, SCREEN_TEXT)
 
 # Key names that do not equal the character they type.
 KEY_CHARS = {"space": " ", "minus": "-", "period": ".", "comma": ",",
@@ -29,6 +30,9 @@ BOX_LINE = _rgb(PAGE_STYLE["boxLine"])
 OPTION_FILL = BOX_FILL
 CHOSEN_FILL = _rgb(PAGE_STYLE["chosen"])
 CHOSEN_LINE = _rgb(PAGE_STYLE["accent"])
+
+# Pictures a text page can show (config.SCREEN_TEXT, third part of a page)
+TRIAL_PICTURES = ("dot", "names", "cue", "correct", "incorrect")
 
 # The bundled page fonts. TextBox2 finds them once registered (_build_page);
 # TextStim needs them passed as fontFiles each time.
@@ -64,6 +68,12 @@ class EndSession(Exception):
     """The researcher chose End on the pause screen, or Esc after a failed
     calibration. The data written so far stay saved and the session goes
     to the debrief letter."""
+
+
+class SkipSection(Exception):
+    """The researcher chose "Skip to next section" on the pause screen
+    during trials: the current phase (practice, learning or test) ends and
+    the session moves on to the next one."""
 
 
 class RestartBlock(Exception):
@@ -120,6 +130,8 @@ def pause_menu():
                                        raise RestartBlock
         Recalibrate, then continue  -> (inside a block only)
                                        raise RestartBlock(recalibrate=True)
+        Skip to next section        -> (inside a block only)
+                                       raise SkipSection
         End session                 -> confirm, then raise EndSession
     """
     if _pres is None:                   # no window yet: nothing to show
@@ -127,7 +139,7 @@ def pause_menu():
 
     print("\nPAUSED. Click an option on the stimulus screen.")
     if _trials_running:
-        options = ["continue", "recalibrate", "end"]
+        options = ["continue", "recalibrate", "skip", "end"]
     else:
         options = ["continue", "end"]
 
@@ -149,6 +161,8 @@ def pause_menu():
     event.clearEvents()                 # drop keys pressed during the pause
     if not _trials_running:
         return
+    if chosen == "skip":
+        raise SkipSection("researcher chose Skip to next section")
     raise RestartBlock(recalibrate=(chosen == "recalibrate"))
 
 
@@ -199,18 +213,19 @@ class Presentation:
             lineWidth=5,
         )
 
-        # feedback: red circle around a wrong name (feedbackWrongMark "o")
+        # feedback: red circle around a wrong name (feedbackWrongMark "o"),
+        # the same size as the green circle
         self.wrong_circle = visual.Circle(
             self.win,
-            radius=GEOMETRY['feedbackCircleRadius_px'],
+            radius=geometry.pair_circle_radius(),
             fillColor=None,
             lineColor="red",
             lineWidth=5,
         )
 
         # feedback X over a wrong choice: two crossing lines whose ends
-        # touch the feedback circle's edge, so both marks are the same size
-        arm = GEOMETRY['feedbackCircleRadius_px'] / 2 ** 0.5
+        # touch a circle the size of the green circle, so all marks match
+        arm = geometry.pair_circle_radius() / 2 ** 0.5
         self.wrong_mark = [
             visual.Line(self.win, start=(-arm, -arm), end=(arm, arm),
                         lineColor="red", lineWidth=5),
@@ -274,18 +289,38 @@ class Presentation:
         self.stim_set = stim_set
 
     def _load_objects(self, stim_set):
-        """{object: drawable}: the image files, or white circles when the
-        set has no images (practice). Both have .pos and .draw(), so the
-        drawing code treats them the same."""
+        """{object: drawable}: the image files, or plain shapes when the
+        set has no images (practice, config.PRACTICE_OBJECTS). Both have
+        .pos and .draw(), so the drawing code treats them the same."""
         if stim_set.images is None:
-            return {obj: visual.Circle(self.win,
-                                       radius=GEOMETRY['objSize_px'] / 2,
-                                       fillColor="white", lineColor="white")
+            return {obj: self._practice_shape(PRACTICE_OBJECTS[obj])
                     for obj in stim_set.names}
         return {obj: visual.ImageStim(self.win,
                                       image=str(stim_set.stim_dir / file_name),
                                       size=GEOMETRY['objSize_px'])
                 for obj, file_name in stim_set.images.items()}
+
+    def _practice_shape(self, features, scale=1.0):
+        """One practice object: (colour, shape, size) -> a filled shape.
+
+        Big: PRACTICE_SIZES["bigWidth_px"] wide; small: smallScale of that.
+        A triangle fills the same box as the square of its size (base and
+        height = width), so every object fits where the real objects go,
+        e.g. under its name in the feedback. scale shrinks it for the
+        trial pictures.
+        """
+        colour, shape, size = features
+        width = PRACTICE_SIZES["bigWidth_px"] * scale
+        if size == "small":
+            width *= PRACTICE_SIZES["smallScale"]
+        if shape == "square":
+            return visual.Rect(self.win, width=width, height=width,
+                               fillColor=colour, lineColor=None)
+        half = width / 2
+        return visual.ShapeStim(self.win,
+                                vertices=[(-half, -half), (half, -half),
+                                          (0, half)],
+                                fillColor=colour, lineColor=None)
 
     def draw_fixation(self):
         """Draw the central dot
@@ -380,6 +415,7 @@ class Presentation:
         left, right = -st["columnWidth"] / 2, st["columnWidth"] / 2
         self._col = (left, right, top, bottom)
 
+        # Everything starts at the left edge of the text column
         self._page_count = self._text(st["bodyFont"], 14, st["accent"],
                                       (left, top - 56), (right - left, 22),
                                       bold=True)
@@ -394,8 +430,17 @@ class Presentation:
                                      st["body"], (left, top - 196),
                                      (right - left, 330),
                                      lineSpacing=st["lineSpacing"])
+        # A page without a title: its text in the vertical middle of the
+        # space between the top and the footer line, at the same left edge
+        self._page_body_mid = self._text(st["bodyFont"], st["bodyHeight"],
+                                         st["body"],
+                                         (left, (top + bottom + 74) / 2),
+                                         (right - left, 400),
+                                         anchor="center-left",
+                                         lineSpacing=st["lineSpacing"])
         footer_y = bottom + 44
         self._footer_y = footer_y
+        self._hairline_y = bottom + 74
         self._hairline = visual.Line(self.win, start=(left, bottom + 74),
                                      end=(right, bottom + 74),
                                      lineColor=_rgb(st["hairline"]),
@@ -408,6 +453,124 @@ class Presentation:
                                      anchor="right", bold=True)
         self._page_mark = visual.Rect(self.win, width=26, height=3,
                                       lineColor=None)
+        # Secondary note: smaller and grey, just above the footer line
+        self._page_note = self._text(st["bodyFont"], 18, st["muted"],
+                                     (left, self._hairline_y + 18),
+                                     (right - left, 60), anchor="bottom-left",
+                                     lineSpacing=st["lineSpacing"])
+        self._pictures = {}             # scale -> picture stimuli
+        self._pic_caption = visual.TextStim(
+            self.win, text="", height=17, color=_rgb(st["muted"]),
+            font=st["bodyFont"], fontFiles=FONT_BODY)
+
+    # --- trial pictures on instruction pages --------------------------------
+    # A small copy of the trial screen, drawn with the practice objects and
+    # names (an example trial: target g2, wrong choice g0, ring not rotated).
+    # The names are drawn larger than to scale, so they stay readable.
+
+    def _build_pictures(self, s):
+        """The stimuli of a picture drawn at scale s (built once per s)."""
+        st = PAGE_STYLE
+        w, h = DISPLAY["size"]
+        pic = {"size": (w * s, h * s)}
+        pic["bg"] = visual.Rect(self.win, width=w * s, height=h * s,
+                                fillColor=DISPLAY["bgColour"], lineColor=None)
+        pic["dot"] = visual.Circle(
+            self.win, radius=max(2.5, GEOMETRY['centralDotRadius_px'] * s),
+            fillColor="white", lineColor=None)
+        pic["names"] = {
+            obj: visual.TextStim(self.win, text=name,
+                                 height=st["pictureNameHeight"],
+                                 color="white")
+            for obj, name in PRACTICE_NAMES.items()}
+        pic["objects"] = {obj: self._practice_shape(f, scale=s)
+                          for obj, f in PRACTICE_OBJECTS.items()}
+        r = geometry.pair_circle_radius() * s
+        pic["pair"] = visual.Circle(self.win, radius=r, fillColor=None,
+                                    lineColor="lime", lineWidth=2)
+        pic["wrong_o"] = [visual.Circle(self.win, radius=r, fillColor=None,
+                                        lineColor="red", lineWidth=2)]
+        arm = r / 2 ** 0.5
+        pic["wrong_x"] = [
+            visual.Line(self.win, start=(-arm, -arm), end=(arm, arm),
+                        lineColor="red", lineWidth=2),
+            visual.Line(self.win, start=(-arm, arm), end=(arm, -arm),
+                        lineColor="red", lineWidth=2)]
+        return pic
+
+    def _draw_picture(self, kind, centre, s):
+        """Draw one picture (TRIAL_PICTURES) at scale s, centred at
+        'centre'; no flip."""
+        if kind not in TRIAL_PICTURES:
+            raise ValueError(f"unknown picture {kind!r}; use one of "
+                             f"{TRIAL_PICTURES}")
+        if s not in self._pictures:
+            self._pictures[s] = self._build_pictures(s)
+        pic = self._pictures[s]
+        cx, cy = centre
+
+        def at(point):                  # full-screen position -> picture
+            return (cx + point[0] * s, cy + point[1] * s)
+
+        order = list(PRACTICE_NAMES)    # ring order of the practice set
+        full = geometry.ring_positions(0)
+        target, wrong = "g2", "g0"
+
+        pic["bg"].pos = centre
+        pic["bg"].draw()
+        if kind in ("dot", "names"):
+            pic["dot"].pos = centre
+            pic["dot"].draw()
+        if kind in ("names", "cue"):
+            for obj, pos in zip(order, full):
+                pic["names"][obj].pos = at(pos)
+                pic["names"][obj].draw()
+        if kind == "cue":
+            pic["objects"][target].pos = centre
+            pic["objects"][target].draw()
+        if kind in ("correct", "incorrect"):
+            name_full = full[order.index(target)]
+            obj_full = geometry.feedback_obj_pos(name_full)
+            pic["names"][target].pos = at(name_full)
+            pic["names"][target].draw()
+            pic["objects"][target].pos = at(obj_full)
+            pic["objects"][target].draw()
+            pic["pair"].pos = at(((name_full[0] + obj_full[0]) / 2,
+                                     (name_full[1] + obj_full[1]) / 2))
+            pic["pair"].draw()
+        if kind == "incorrect":
+            wrong_pos = at(full[order.index(wrong)])
+            pic["names"][wrong].pos = wrong_pos
+            pic["names"][wrong].draw()
+            marks = (pic["wrong_x"] if GEOMETRY['feedbackWrongMark'] == "x"
+                     else pic["wrong_o"])
+            for mark in marks:
+                mark.pos = wrong_pos
+                mark.draw()
+
+    def _draw_pictures(self, pictures):
+        """Pictures in a row above the page footer, captions under them.
+
+        One picture: PAGE_STYLE["pictureScale"]. Several: smaller if needed,
+        so the row fits the text column.
+        """
+        left, right, _, _ = self._col
+        gap = 24
+        n = len(pictures)
+        screen_w, screen_h = DISPLAY["size"]
+        fit = ((right - left) - gap * (n - 1)) / n / screen_w
+        s = min(PAGE_STYLE["pictureScale"], fit)
+        w, h = screen_w * s, screen_h * s
+        captions = any(caption for _, caption in pictures)
+        base = self._hairline_y + 24 + (28 if captions else 0)
+        y = base + h / 2
+        for i, (kind, caption) in enumerate(pictures):
+            x = (i - (n - 1) / 2) * (w + gap)
+            self._draw_picture(kind, (x, y), s)
+            if caption:
+                self._pic_caption.text = caption
+                self._pic_caption.pos = (x, base - 14)
+                self._pic_caption.draw()
 
     def _text(self, font, height, colour, pos, size, anchor="top-left",
               text="", **kwargs):
@@ -424,17 +587,31 @@ class Presentation:
         presses nothing). fill: values for {} fields, e.g. {"round": 2}.
         """
         st = PAGE_STYLE
-        title, body = pages[index]
+        title, body = pages[index][:2]
+        # optional third part: [(picture, caption), ...], or a text, which
+        # is shown as a small grey note above the footer line
+        extra = pages[index][2] if len(pages[index]) > 2 else None
+        pictures = extra if isinstance(extra, list) else []
+        note = extra if isinstance(extra, str) else ""
         if fill:
             title, body = title.format(**fill), body.format(**fill)
         if len(pages) > 1:
             self._page_count.text = f"{index + 1} OF {len(pages)}"
             self._page_count.draw()
-        self._page_title.text = title
-        self._page_title.draw()
-        self._page_rule.draw()
-        self._page_body.text = body
-        self._page_body.draw()
+        if title:
+            self._page_title.text = title
+            self._page_title.draw()
+            self._page_rule.draw()
+            self._page_body.text = body
+            self._page_body.draw()
+        else:
+            self._page_body_mid.text = body
+            self._page_body_mid.draw()
+        if pictures:
+            self._draw_pictures(pictures)
+        if note:
+            self._page_note.text = note
+            self._page_note.draw()
         if not nav:
             return
 
@@ -478,13 +655,18 @@ class Presentation:
                 pause_menu()
 
     @_on_paper
-    def show_waiting(self, pages, keys):
-        """One page without a footer, until one of 'keys' is pressed (by the
-        researcher); returns that key. The participant presses nothing."""
-        self.draw_page(pages, 0, nav=False)
-        self.flip()
+    def show_choice(self, pages, keys):
+        """One page without the footer (its text names the keys) until one
+        of 'keys' is pressed; returns that key. Esc opens the pause screen,
+        and after Continue the page is shown again."""
         event.clearEvents()
-        return event.waitKeys(keyList=list(keys))[0]
+        while True:
+            self.draw_page(pages, 0, nav=False)
+            self.flip()
+            key = event.waitKeys(keyList=list(keys) + ["escape"])[0]
+            if key in keys:
+                return key
+            pause_menu()
 
     @_on_paper
     def choose_button(self, page, labels, danger=()):
