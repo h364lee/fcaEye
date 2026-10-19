@@ -1,8 +1,6 @@
-"""config.py: every setting of the experiment, in one place.
-
-No other file holds a number or a text that you may want to change.
-Sections, from the most often changed to the least (search "# 3." etc.):
-
+"""
+All parameters are stored here.
+Outline:
      1. SESSION SWITCHES     parts on or off for testing; demo trial counts
      2. COUNTERBALANCING     group cell for this session; the design table
      3. SESSION STRUCTURE    practice length, learning criterion, test length
@@ -14,21 +12,18 @@ Sections, from the most often changed to the least (search "# 3." etc.):
      9. TEXT                 everything participants read
     10. LOOK OF TEXT SCREENS fonts and colours
 
-Names: g0-g7 are objects, m0-m5 attributes (0-based, as in FCA).
+Names: g0-g7 are objects, m0-m5 attributes
 """
 
 from pathlib import Path
 
-
-
 # ==========================================================================
 # 1. SESSION SWITCHES
-#    Turn parts of the session on or off while testing.
 # ==========================================================================
 
 SESSION = {
-    "yesDemographics": True,     # False: skip the questions, ID becomes "debug"
-    "yesCalibration": False,      # False: use the calibration stored in the tracker
+    "yesDemographics": True,     
+    "yesCalibration": False,     
 }
 
 # TEMPORARY, for demos: cut every block of a stage to this many trials.
@@ -41,13 +36,11 @@ DEMO_TRIALS = {
     "test": 3,           # per test block, e.g. 5
 }
 
-
 # ==========================================================================
 # 2. COUNTERBALANCING
-#    Which group cell this session runs.
+# Set group cell
 # ==========================================================================
 
-# Set by hand for now; later from the participant number.
 COUNTERBALANCE = {
     "groupCell": 1,                 # a row of GROUP_CELLS
 }
@@ -57,7 +50,7 @@ COUNTERBALANCE = {
 # Same context in both phases = "isom"; different = "shift".
 # 2 x 2 x 2: phase-1 context x isom/shift x which set comes first.
 GROUP_CELLS = {
-    #    phase 1      phase 2
+    #    phase 1     phase 2
     1: [("M3", 1), ("M3", 2)],     # isom
     2: [("M3", 1), ("N5", 2)],     # shift
     3: [("N5", 1), ("N5", 2)],     # isom
