@@ -28,7 +28,7 @@ SESSION = {
 
 # trial numbers for demo
 DEMO_TRIALS = {
-    "practice": 3,       # e.g. 3
+    "practice": 2,       # e.g. 3
     "learning": 4,       # per learning block, e.g. 4
     "test": 5,           # per test block, e.g. 5
 }
@@ -313,12 +313,6 @@ ORDER = {
 #    Everything participants read.
 # ==========================================================================
 
-# Revised after the ethics submission (Oct 2026): check whether the ethics
-# documents need the same changes.
-# Screens that only show text are lists of pages: (title, body). Text starts
-# at the left; a page with no title ("") shows its text in the vertical
-# middle of the screen. The participant moves with the arrow keys: right = next,
-# left = back; the page footer shows the keys (NAV_TEXT).
 SCREEN_TEXT = {
     # Screen 1
     "greeting": [
@@ -444,8 +438,8 @@ SCREEN_TEXT = {
     # and the session ends when the participant leaves it)
     "thankYou": [
         ("Thank you for your participation!",
-         "Please read the debrief form on the next pages.\n\n"
-         "When you have finished, please let the researcher know."),
+         "Please let the researcher know that you have finished.\n\n"
+         "Continue to read the debrief form on the next pages."),
     ],
     # Shown before an abandoned round starts again
     "blockRestart": [
