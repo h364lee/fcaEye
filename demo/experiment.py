@@ -1,22 +1,9 @@
-"""experiment.py: session and trial flow.
+"""Session and trial flow.
 
-Session:
-    greeting, demographics -> task instructions -> calibration ->
-    recording starts ->
-    practice (1 block, placeholder objects) ->
-    learning 1 (blocks until the criterion; config.PHASES) -> test 1 ->
-    learning 2 -> test 2 ->
-    post-task questions -> thank you, debrief letter
-
-A learning block: each object equally often in random order, feedback.
-A test block: one Euler tour (design.trial_sequence), no feedback.
-
-Esc opens a pause screen (presentation.pause_menu). The researcher chooses:
-    End      -> data stay saved; go to the debrief letter
-    Continue -> outside a block: the same screen carries on
-                inside a block: optional recalibration, then the block
-                starts again with a new order; in learning, the count of
-                consecutive blocks at criterion starts again from 0
+Session: greeting, demographics -> instructions -> calibration ->
+recording starts -> practice rounds -> learning 1 (until criterion) ->
+test 1 -> post-task questions -> thank you, debrief letter.
+Esc opens the pause screen (presentation.pause_menu).
 """
 
 import csv
@@ -43,7 +30,7 @@ from presentation import (EndSession, Presentation, RestartBlock,
 
 
 def ask_demographics(pres):
-    """Ask SONA ID, age and gender. Age can be skipped (saved as empty)."""
+    """Ask SONA ID, age (optional) and gender."""
     digits = "0123456789"
     question, hint = SCREEN_TEXT["sonaId"]
     sona_id = pres.type_answer(question, digits, hint=hint, max_len=6,
@@ -63,14 +50,8 @@ def ask_demographics(pres):
 
 
 def posttask_q(pres, tracker_path):
-    """Ask the four post-task questions and save the answers.
-
-    Keyboard only; every question can be skipped (saved as an empty cell).
-    Saved once per session, next to the tracker file:
-        data/<id>_<date>_<time>_posttask.csv
-    """
-    # Q3 shows each feature alone: the image whose row has a 1 only for
-    # that feature, e.g. "100000.png" for the first feature
+    """Ask the post-task questions; save to <tracker file>_posttask.csv."""
+    # Q3 image for each feature: only that feature present, e.g. 100000.png
     images = []
     for feature in IMAGE_NAME_ORDER:
         row = "".join("1" if f == feature else "0" for f in IMAGE_NAME_ORDER)
@@ -96,33 +77,20 @@ def posttask_q(pres, tracker_path):
 
 
 def run_trial(pres, target, trial_n, previous_obj, feedback=True):
-    """Run one trial and return what happened.
+    """Run one trial and return its data row.
 
-    Uses the stimulus set last given to pres.use_set().
-    previous_obj: the previous trial's target (the prime), None on the
-    first trial of a block.
-    feedback: False in test blocks; step 4 is then skipped.
-
-    1. dot alone until central fixation is held
-    2. names appear on the ring; gaze must stay on the dot for a jittered
-       config.TIMING["previewDurRange"]
-    3. dot becomes the object; poll until a name is selected or timeout
-    4. feedback
-    5. blank interval
+    Args:
+        previous_obj: previous target (the prime); None on a block's first trial.
+        feedback: False in test blocks.
 
     Names appear before the object so that cue-to-gaze time does not
-    include searching for them.
-
-    Each event is marked in the tracker's data file straight after the
-    flip that shows it, so the marker lands as close as possible to the
-    moment the screen changed.
+    include searching for them. Each event is marked right after its flip.
     """
     times = {}
 
     def mark(event, **fields):
-        # Each event gets three times, all taken right after its flip:
-        # the PsychoPy time, the tracker time from GetLastResult, and the
-        # marker in the tracker file. The first two go in the trial file.
+        # Three times per event: PsychoPy time and tracker time (both in
+        # the trial file), and a marker in the tracker file.
         column = trialdata.EVENT_TIMES[event]
         times[column] = core.getTime()
         times[trialdata.tracker_column(column)] = eventlog.tracker_time_us()
@@ -140,12 +108,11 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
     mark("fixation_held")
 
     # --- 2. preview -------------------------------------------------------
-    # Jittered so cue onset cannot be anticipated.
+    # Random duration, so the object onset cannot be anticipated.
     pres.draw_names(positions)
     pres.draw_fixation()
     pres.flip()
     mark("names_on")
-    # Gaze must stay on the dot before the object appears
     preview_s = random.uniform(*TIMING['previewDurRange'])
     response.wait_for_central_fixation(pres, preview_s, positions)
 
@@ -159,8 +126,7 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
     mark("object_on")
     responder.start()
 
-    # Redraw every frame: flipping advances the frame, and the responder
-    # is polled once per frame.
+    # The responder is polled once per frame.
     clock = core.Clock()
     while clock.getTime() < TIMING['responseTimeout_s'] and responder.result() is None:
         check_escape()
@@ -221,22 +187,18 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
 
 
 def demo_cut(targets, stage):
-    """TEMPORARY: the first DEMO_TRIALS[stage] targets, or all if None."""
+    """TEST: keep the first DEMO_TRIALS[stage] targets (all if None)."""
     limit = DEMO_TRIALS[stage]
     return targets if limit is None else targets[:limit]
 
 
 class Session:
-    """What every block needs, kept in one place.
+    """Session-wide trial count and rows.
 
-    columns: the session columns written on every trial row
-    trial_n: trials started so far, abandoned ones included, so trial
-             numbers stay unique in the data files
-    rows:    every trial row written, for the summary at the end
+    trial_n counts abandoned trials too, so trial numbers stay unique.
     """
 
-    def __init__(self, columns):
-        self.columns = columns
+    def __init__(self):
         self.trial_n = 0
         self.rows = []
 
@@ -244,12 +206,11 @@ class Session:
 def run_block(pres, session, block_info, targets, feedback):
     """Run one block of trials; return its rows.
 
-    block_info: phase, block, attempt, stimSet and blockSeed, written on
-    every row of the block.
+    block_info is written on every row of the block.
     """
     eventlog.mark("block_start", **block_info)
     rows = []
-    previous_obj = None                 # first trial of a block has no prime
+    previous_obj = None
     pres.park_mouse()                   # cursor off the participant's screen
     set_trials_running(True)
     try:
@@ -258,13 +219,13 @@ def run_block(pres, session, block_info, targets, feedback):
             trial = run_trial(pres, target, session.trial_n, previous_obj,
                               feedback)
             row = {**block_info, "feedback": feedback, **trial}
-            trialdata.write_row(session.columns, row)
+            trialdata.write_row(row)
             session.rows.append(row)
             rows.append(row)
             previous_obj = target
     finally:
-        # Runs before the caller handles RestartBlock, so a recalibration
-        # there is not treated as trials (Continue resumes the calibration).
+        # Runs before the caller handles RestartBlock, so Esc during a
+        # recalibration is not treated as during trials.
         set_trials_running(False)
     eventlog.mark("block_end", phase=block_info["phase"],
                   block=block_info["block"])
@@ -273,12 +234,9 @@ def run_block(pres, session, block_info, targets, feedback):
 
 def run_block_until_done(pres, session, phase, block_n, stim_set,
                          make_targets, feedback):
-    """Run a block; if it is abandoned from the pause screen, run it again.
+    """Run a block, and run it again (new seed) each time it is abandoned.
 
-    make_targets(seed) returns the block's targets. Each attempt gets a new
-    seed, so a repeated block does not repeat the same order.
-
-    Returns (rows, restarted). restarted is True if an attempt was abandoned.
+    Returns (rows, restarted); restarted is True if an attempt was abandoned.
     """
     pres.use_set(stim_set)
     restarted = False
@@ -307,9 +265,7 @@ def run_block_until_done(pres, session, phase, block_n, stim_set,
 
 
 def run_practice(pres, session, stim_set):
-    """Practice rounds of PHASES["practiceTrials"] trials. After each round
-    the participant chooses: Space = practise again, right arrow = move on.
-    "Skip to next section" on the pause screen also ends the practice."""
+    """Practice rounds until the participant chooses to move on."""
     round_n = 0
     try:
         while True:
@@ -335,12 +291,9 @@ def run_practice(pres, session, stim_set):
 def run_learning(pres, session, phase, stim_set):
     """Learning blocks until the criterion is met; return the blocks run.
 
-    Criterion: at least PHASES["learnCriterion"] correct (a timeout counts
-    as not correct) in PHASES["learnCriterionBlocks"] consecutive blocks.
-    An abandoned block sets the count back to 0.
-    Not met within PHASES["learnMaxBlocks"] blocks -> EndSession, so the
-    participant goes to the debrief.
-    "Skip to next section" on the pause screen ends learning at once.
+    An abandoned block resets the consecutive count to 0. If the criterion
+    is not met in PHASES["learnMaxBlocks"] blocks, raises EndSession.
+    Returns None if skipped from the pause screen.
     """
     try:
         in_a_row = 0
@@ -390,8 +343,7 @@ def run_learning(pres, session, phase, stim_set):
 
 
 def run_test(pres, session, phase, stim_set):
-    """One test block: one Euler tour, no feedback. "Skip to next section"
-    on the pause screen ends it."""
+    """Run one test block: one Euler tour, no feedback."""
     try:
         run_block_until_done(
             pres, session, phase, 1, stim_set,
@@ -404,20 +356,16 @@ def run_test(pres, session, phase, stim_set):
 
 
 def run_calibration(pres):
-    """Calibrate until both eyes pass; return (accuracy, attempts).
+    """Calibrate until both eyes pass (no attempt limit).
 
     Assumes the tracker is set to raw results and is tracking.
-
-    The instructions are shown once. After each attempt the participant
-    sees whether it was successful; a failed attempt runs again at once.
-    No limit on attempts; the count is shown in the terminal and saved.
-    The researcher can press Esc for the pause screen (e.g. End session).
+    Returns (accuracy, attempts).
     """
     pres.show_pages(SCREEN_TEXT["calibration"])       # Screen 3
     attempts = 0
     while True:
         attempts += 1
-        pres.park_mouse()               # cursor off the participant's screen
+        pres.park_mouse()
         accuracy = calibrate.gaze_calibration(pres.win)
         if calibrate.report_calibration(pres, accuracy, attempts):
             print(f"PASSED on attempt {attempts}.")
@@ -429,20 +377,15 @@ def run_calibration(pres):
 
 
 def recalibrate(pres):
-    """Calibrate again in the middle of a session, with the data file open.
+    """Calibrate again mid-session, with the data file open.
 
-    Same tracker steps as at the session start: raw results for the
-    calibration, then calibrated results again. The samples recorded in
-    between are raw (pupil/glint vectors, not screen pixels), so they sit
-    between the recalibration_start and recalibration_end markers, where
-    the merge step can drop them.
-
-    NOT YET TESTED on the tracker: whether the data file keeps recording
-    across StopTracking/StartTracking.
+    Samples between the recalibration_start and recalibration_end markers
+    are raw (not screen pixels); the merge step can drop them.
+    NOT YET TESTED: whether the data file keeps recording across
+    StopTracking/StartTracking.
     """
     eventlog.mark("recalibration_start")
-    # The marker is written with the next sample (eventlog.py), so let one
-    # sample arrive before tracking stops.
+    # The marker is written with the next sample, so let one arrive first.
     core.wait(0.01)
     LiveTrack.StopTracking()
     LiveTrack.SetResultsTypeRaw()
@@ -461,12 +404,7 @@ def recalibrate(pres):
 
 
 def show_ending(pres):
-    """Thank-you page and debrief letter (Screens 13-14); the session ends
-    when the participant leaves the letter.
-
-    Shown after a full session and after End on the pause screen. The data
-    are saved by then, so Esc here only leaves the letter early.
-    """
+    """Show the thank-you page and debrief letter (Screens 13-14)."""
     pres.show_debrief()
 
 
@@ -475,19 +413,18 @@ def main():
     geometry.ring_rotation()          # stops here if the setting is invalid
     design.check_design()
 
-    # Stimulus sets for this session. A test order is built once here, so
-    # a problem with the Euler tour shows up before anything opens.
+    # Phase 2 is not run for now, but its set is still built and logged.
     sets = design.stimulus_sets()
     practice_set = sets["practice"]
     phase1_set = sets["phase1"]
     phase2_set = sets["phase2"]
     used_sets = [practice_set, phase1_set, phase2_set]
-    # Shown in the terminal so the researcher can check the condition
     print(f"Group cell {COUNTERBALANCE['groupCell']} "
           f"({design.phase2_relation()}):")
     for phase in (phase1_set, phase2_set):
         print(f"  {phase.label}: context {phase.context_label}, "
               f"object set {phase.object_set}")
+    # Builds one test order now, so an Euler tour problem shows up early.
     test_length = len(design.trial_sequence(1, phase1_set.objects))
     if any(v is not None for v in DEMO_TRIALS.values()):
         print(f"DEMO: blocks cut to {DEMO_TRIALS} (config.DEMO_TRIALS)")
@@ -505,11 +442,10 @@ def main():
 
     session = None                    # set once recording starts
     accuracy = {}                     # stays empty if calibration is skipped
-    calibration_attempts = 0          # stays 0 if calibration is skipped
+    calibration_attempts = 0
     participant = {"sonaID": "debug", "age": "", "gender": ""}
     try:
-        # Inside the try, so Esc during the questions still closes the
-        # window and the tracker.
+        # Inside the try, so Esc here still closes the window and tracker.
         pres.show_pages(SCREEN_TEXT["greeting"])          # Screen 1
         if SESSION["yesDemographics"]:
             participant = ask_demographics(pres)            # Screen 2
@@ -517,31 +453,26 @@ def main():
 
         pres.show_pages(SCREEN_TEXT["task"])               # Screen 5
 
-        # From here on the cursor must not be on the stimulus screen.
         pres.park_mouse()
 
         if SESSION["yesCalibration"]:
             accuracy, calibration_attempts = run_calibration(pres)
 
-        # From here gaze comes back as GazeX/GazeY in screen pixels centred
-        # at 0,0 -- the same frame the responders use -- because the
-        # calibration targets were given in those units.
-        #
-        # The results type is set while buffering is stopped, the order
-        # CRS's own demos use.
+        # From here gaze is in screen pixels centred at 0,0 (the units of
+        # the calibration targets). The results type is set while tracking
+        # is stopped, as in CRS's demos.
         LiveTrack.StopTracking()
         LiveTrack.SetResultsTypeCalibrated()
         LiveTrack.ClearDataBuffer()
 
-        # Recording starts here, after calibration, so the file holds only
-        # calibrated trial data in screen pixels.
+        # Recording starts after calibration, so the file holds only
+        # calibrated data.
         path = eventlog.open_session(pid)
         LiveTrack.StartTracking()
         print(f"Recording to {path}")
 
-        # About 0.4 s after recording starts, the tracker resets its own
-        # clock once (seen in CRS's demo files too). Waiting past that point
-        # puts every marker after the reset.
+        # The tracker resets its clock about 0.4 s after recording starts;
+        # wait so every marker comes after the reset.
         core.wait(0.5)
 
         columns = trialdata.session_columns(
@@ -549,12 +480,15 @@ def main():
             datetime.now().isoformat(timespec="seconds"),
             screen_rate, tracker_rate, tracked_eyes, used_sets,
             calibration_attempts)
-        print(f"Trials to {trialdata.open_file(path, columns)}")
-        session = Session(columns)
+        # Needed later to judge where gaze was
+        columns["nameSelectRadius_px"] = round(pres.name_radius_px, 2)
+        columns["px_per_deg"] = round(geometry.px_per_deg(), 4)
+        session_path, trials_path = trialdata.open_files(path, pid, columns)
+        print(f"Session to {session_path}")
+        print(f"Trials to {trials_path}")
+        session = Session()
 
-        # One marker for everything known at the start. Markers sent close
-        # together can collapse into one (seen with the two calibration
-        # markers), so these values share a single comment.
+        # One marker only: markers sent close together can merge into one.
         calibration = {f"cal_{eye}_deg": f"{entry['accuracy_deg']:.3f}"
                        for eye, entry in accuracy.items()}
         eventlog.mark("session_start", participant=pid, **calibration)
@@ -567,10 +501,11 @@ def main():
         pres.show_pages(SCREEN_TEXT["test"])               # Screen 8
         run_test(pres, session, "test1", phase1_set)
 
-        pres.show_pages(SCREEN_TEXT["learning2"])
-        run_learning(pres, session, "learning2", phase2_set)
-        pres.show_pages(SCREEN_TEXT["test"])
-        run_test(pres, session, "test2", phase2_set)
+        # Learning 2 and test 2 are off for now. To add them back:
+        #   pres.show_pages(SCREEN_TEXT["learning2"])
+        #   run_learning(pres, session, "learning2", phase2_set)
+        #   pres.show_pages(SCREEN_TEXT["test"])
+        #   run_test(pres, session, "test2", phase2_set)
 
         eventlog.mark("trials_end")
         pres.show_pages(SCREEN_TEXT["taskEnd"])
@@ -578,8 +513,7 @@ def main():
         eventlog.mark("session_end")
         show_ending(pres)
     except EndSession as e:
-        # Everything written so far is already on disk. The participant
-        # still gets the debrief, as after a full session.
+        # Data so far are on disk; the participant still gets the debrief.
         set_trials_running(False)
         eventlog.mark("session_ended_early")    # no-op before recording
         print(f"\nENDED EARLY: {e}")

@@ -1,22 +1,14 @@
-"""TEMPORARY: run experiment.py without the eye tracker. Delete when done.
+"""TEMPORARY test script: runs experiment.py with a fake tracker; mouse = gaze.
 
-The mouse position stands in for gaze: hold the mouse on the dot to pass
-the fixation check, and hold it on a name to select it.
-
-How it works: experiment.py, response.py, eventlog.py and calibrate.py all
-do `import LiveTrack`. Python checks sys.modules before it searches for a
-module, so putting a stand-in module there first makes every one of those
-imports get the stand-in. No project file is changed.
-
-Run from the demo folder:  python run_without_tracker.py
+Delete when done. Run from the demo folder:  python run_without_tracker.py
 """
 
 import sys
 import time
 import types
 
-# --- 1. stand-in LiveTrack module ---------------------------------------
-# Must be in sys.modules before experiment is imported.
+# Fake LiveTrack module. It must be in sys.modules before experiment is
+# imported, so every `import LiveTrack` in the project gets it.
 fake = types.ModuleType("LiveTrack")
 _start = time.perf_counter()
 _marker_file = None
@@ -24,19 +16,18 @@ _mouse = None
 
 
 class _Sample:
-    """One reading, with the fields the project reads from real samples."""
+    """Fake sample with the fields the project reads."""
 
     def __init__(self, x, y):
         self.Tracked = True
         self.GazeX = x
         self.GazeY = y
-        # tracker clock in microseconds
+        # microseconds, like the tracker clock
         self.Timestamp = int((time.perf_counter() - _start) * 1e6)
 
 
 def _mouse_sample():
-    # Created on first use, because the window must exist first.
-    # presentation._pres is set when the window opens.
+    # Mouse is created on first use: it needs the window (presentation._pres).
     global _mouse
     if _mouse is None:
         import presentation
@@ -62,8 +53,7 @@ fake.GetBufferedEyePositions = lambda *args: [_mouse_sample()]
 
 
 def _set_data_filename(path):
-    # No tracker file. The markers go to a text file instead, so you can
-    # check that each event is marked where you expect.
+    # No tracker file; event markers go to a text file for checking.
     global _marker_file
     _marker_file = open(str(path).replace(".csv", "_markers.txt"), "w")
     return 0
@@ -86,18 +76,14 @@ fake.SetDataComment = _set_data_comment
 fake.CloseDataFile = _close_data_file
 sys.modules["LiveTrack"] = fake
 
-# --- 2. settings for running on the laptop ------------------------------
-# These dicts are shared with every module that imported them, so changing
-# them here changes them everywhere.
+# Laptop settings. The config dicts are shared, so changes apply everywhere.
 import config
 
 config.DISPLAY["screen"] = 0              # the laptop has one screen
 config.DISPLAY["fullscreen"] = False      # keep the terminal visible
-# Separate folder, so test files never mix with real data.
-# merge.py only looks directly inside data/, not in subfolders.
+# Subfolder, so merge.py (reads data/ only) never picks up test files
 config.PATHS["dataDir"] = config.PROJECT_DIR / "data" / "no_tracker"
 
-# --- 3. calibration and the cursor --------------------------------------
 import calibrate
 import presentation
 
@@ -112,7 +98,6 @@ calibrate.gaze_calibration = _fake_calibration
 # park_mouse normally hides the cursor; here the cursor is the gaze.
 presentation.Presentation.park_mouse = lambda self: None
 
-# --- 4. run -------------------------------------------------------------
 import experiment
 
 print("NO TRACKER: the mouse stands in for gaze.")

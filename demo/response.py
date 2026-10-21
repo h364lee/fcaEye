@@ -1,10 +1,7 @@
-"""Collecting a response.
+"""Central fixation gate and gaze-dwell selection.
 
-wait_for_central_fixation holds the trial until gaze stays on the central dot.
-GazeDwellResponder decides which object is selected after the cue.
-
-The responder is polled, not blocking, because the trial loop also has to
-keep drawing and checking for quit.
+The responder is polled, not blocking, so the trial loop can keep drawing
+and checking for Esc.
 """
 import sys
 sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
@@ -19,21 +16,18 @@ from psychopy import core
 
 
 class FixationTimeout(Exception):
-    """Central fixation was never held for long enough.
+    """Central fixation was not held in time.
 
-    Raised rather than handled locally, because the session cannot continue:
-    either the tracker has lost the eye, or gaze is reading far enough from
-    where the participant is actually looking that the criterion cannot be
-    met. Both need a person to intervene.
+    Ends the session: the tracker has lost the eye or gaze reads far from
+    where the participant looks. A person must fix this.
     """
 
 
 def newest_tracked():
-    """Newest tracked gaze position, or None if every reading was lost.
+    """Newest tracked gaze position (px from screen centre), or None.
 
-    Draining the buffer keeps it small; we only want the latest reading.
-    Shared by the fixation gate and the dwell responder so both treat a
-    lost eye the same way.
+    Reads and empties the buffer. Shared by the fixation gate and the
+    responder so both treat a lost eye the same way.
     """
     samples = LiveTrack.GetBufferedEyePositions(1, -1, 1)
     for s in reversed(samples):
@@ -43,26 +37,13 @@ def newest_tracked():
 
 
 def wait_for_central_fixation(pres, hold_s, positions=None):
-    """Hold here until gaze has stayed near the screen centre for hold_s.
+    """Wait until gaze has stayed on the central dot for hold_s seconds.
 
-    Without positions, only the dot is on screen. With positions, the names
-    are drawn too, so gaze must stay on the dot while the names are visible.
-    If gaze leaves the dot, the count starts again from zero.
+    positions: name positions to draw as well, or None for the dot alone.
+    Leaving the dot resets the count to zero. A loss of gaze up to
+    blinkTimeout_ms pauses the count; a longer one resets it.
 
-    The screen is redrawn every frame, because flipping is what advances the
-    frame and the screen has to keep refreshing while we wait.
-
-    A blink pauses the count rather than resetting it, using the same gap
-    limit as the dwell responder -- a blink is missing information, not
-    evidence that the eye moved.
-
-    Args:
-        pres: a Presentation.
-        hold_s: how long gaze must stay on the dot, in seconds.
-        positions: ring positions of the names, or None for the dot alone.
-
-    Raises:
-        FixationTimeout: the hold was never achieved within timeout_s.
+    Raises FixationTimeout after CENTRAL_FIXATION["centralTimeout_s"].
     """
     radius_px = CENTRAL_FIXATION['centralRadius_deg'] * geometry.px_per_deg()
     timeout_s = CENTRAL_FIXATION['centralTimeout_s']
@@ -95,8 +76,7 @@ def wait_for_central_fixation(pres, hold_s, positions=None):
                 held_s = 0.0
         else:
             gap_start = None
-            # math.hypot(x, y) is the distance from the screen centre,
-            # since gaze coordinates have their origin there.
+            # Gaze origin is the screen centre.
             if math.hypot(*pos) <= radius_px:
                 held_s += dt
             else:
@@ -109,18 +89,13 @@ def wait_for_central_fixation(pres, hold_s, positions=None):
 
 
 class GazeDwellResponder:
-    """Selection by holding gaze on an object.
+    """Selection by holding gaze on one name for dwell_ms.
 
-    Two conditions must both hold for the count to continue:
-      1. gaze is within stability_px of the anchor (where this dwell began)
-      2. gaze is on the same object it was on at the anchor
+    The count continues while gaze stays within stability_px of where the
+    dwell began and on the same name; otherwise it restarts. A loss of gaze
+    up to blinkTimeout_ms pauses the count; a longer one resets it.
 
-    A blink pauses the count rather than resetting it, up to blinkTimeout_ms.
-
-    Lifecycle:
-        start()   once, at cue onset
-        poll()    once per frame
-        result()  each frame; returns None until a selection is made
+    Call start() at cue onset, then poll() and result() every frame.
     """
 
     def __init__(self, positions, ring_order, radius_px):
@@ -129,28 +104,26 @@ class GazeDwellResponder:
         self.radius_px = radius_px        # selection circle around each name
         self.clock = core.Clock()
 
-        # degrees -> pixels, same formula calibrate.py uses
         self.stability_px = DWELL_SELECTION["dwellRadius_deg"] * geometry.px_per_deg()
-        # "Left the centre" uses the same radius as "on the dot" in
-        # wait_for_central_fixation, so the two measures agree
+        # Same radius as wait_for_central_fixation, so the two agree.
         self.central_px = CENTRAL_FIXATION["centralRadius_deg"] * geometry.px_per_deg()
         self.dwell_s = DWELL_SELECTION["dwell_ms"] / 1000
         self.blink_gap_s = DWELL_SELECTION["blinkTimeout_ms"] / 1000
 
-        # State is set up in start(), which the trial calls at cue onset.
-        # Not called here as well, or the buffer would be cleared twice.
+        # The rest of the state is set in start(). Not called here, or the
+        # buffer would be cleared twice.
         self.outcome = None
 
     def start(self):
-        """Reset clock and internal state. Called at cue onset."""
+        """Reset the clock and state. Call at cue onset."""
         self.clock.reset()
         self.outcome = None
         self.first_move_ms = None
         self.anchor = None        # gaze position where the current dwell began
-        self.dwell_on = None      # object at the anchor
-        self.dwell_accum = 0.0    # seconds counted so far
+        self.dwell_on = None      # name at the anchor
+        self.dwell_accum = 0.0    # seconds
         self.last_poll = 0.0
-        self.gap_start = None     # when the current untracked gap began
+        self.gap_start = None     # start of the current loss of gaze
         LiveTrack.ClearDataBuffer()   # discard samples recorded before the cue
 
     def _restart(self, pos, here):
@@ -160,7 +133,7 @@ class GazeDwellResponder:
         self.gap_start = None
 
     def poll(self):
-        """Read the newest gaze sample once and update the dwell count."""
+        """Read the newest gaze sample and update the dwell count."""
         if self.outcome is not None:
             return
 
@@ -170,8 +143,7 @@ class GazeDwellResponder:
 
         pos = newest_tracked()
 
-        # No usable reading. Hold everything; the eye has not moved,
-        # we just cannot see it.
+        # No gaze (e.g. a blink): keep the count unless the loss is too long.
         if pos is None:
             if self.gap_start is None:
                 self.gap_start = now
@@ -207,13 +179,10 @@ class GazeDwellResponder:
             }
 
     def result(self):
-        """The outcome so far.
-
-        Returns:
-            None while no selection has been made, otherwise a dict with
-                selection       object name
-                selection_ms    time from start() to selection
-                first_move_ms   time gaze first left the centre, or
-                                None if it has not
+        """None until a selection is made, then a dict:
+            selection       object name
+            selection_ms    ms from start() to selection
+            first_move_ms   ms from start() until gaze first left the
+                            centre, or None
         """
         return self.outcome

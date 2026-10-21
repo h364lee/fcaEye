@@ -1,4 +1,6 @@
-"""Ring layout and hit testing.
+"""Ring layout, selection circles, and layout checks.
+
+Positions are in pixels, origin at the screen centre, y up (PsychoPy).
 """
 
 import math
@@ -8,8 +10,7 @@ from config import CALIBRATION, DISPLAY, GEOMETRY
 
 
 def px_per_deg():
-    """Screen pixels per degree of visual angle.
-    """
+    """Screen pixels per degree of visual angle."""
     px_per_mm = DISPLAY['size'][0] / CALIBRATION['screenSize_mm'][0]
     mm_per_deg = math.tan(math.radians(1)) * CALIBRATION['viewDist_mm']
     return mm_per_deg * px_per_mm
@@ -18,9 +19,8 @@ def px_per_deg():
 def ring_rotation():
     """Ring rotation in degrees for one trial, from GEOMETRY['ringRotation'].
 
-    0 = first slot at 3 o'clock; positive turns the ring counter-clockwise). 
-    "random" draws a new rotation each trial between 0 and the angle between two slots; 
-    larger rotations would only repeat the same layouts.
+    0 = first slot at 3 o'clock; positive is counter-clockwise. "random"
+    draws from 0 to one slot angle; larger values only repeat layouts.
     """
     value = GEOMETRY['ringRotation']
     if value == "random":
@@ -32,8 +32,7 @@ def ring_rotation():
 
 
 def ring_positions(rotation_deg):
-    # output: the positions (x, y) of the objects along the ring
-    # rotated rotation_deg degrees
+    """(x, y) of each ring slot, in slot order, rotated by rotation_deg."""
     n = GEOMETRY['objCount']
     r = GEOMETRY['ringRadius']
 
@@ -46,28 +45,21 @@ def ring_positions(rotation_deg):
         
 
 def name_select_radius_px(name_sizes):
-    """Radius of the selection circle around every name, in pixels.
+    """Radius in px of the selection circle, the same for every name.
 
-    name_sizes: (width, height) in px of each name as drawn on screen.
-
-    The circle must cover the whole name, so it starts from the distance
-    between a name's centre and its corner (half the diagonal). The widest
-    name sets this, so every name gets the same circle. The margin is added
-    on top for tracker error.
+    name_sizes: (width, height) in px of each drawn name.
+    Half the largest name diagonal, so the circle covers the whole name,
+    plus a margin for tracker error.
     """
     half_diagonal = max(math.hypot(w / 2, h / 2) for w, h in name_sizes)
     return half_diagonal + GEOMETRY['nameSelectMargin_deg'] * px_per_deg()
 
 
 def object_at(point, positions, ring_order, radius_px):
-    # Decide which object a point is on
+    """Object (e.g. "g1") whose selection circle holds point, or None.
 
-    # point: (x, y) on screen (centre origin)
-    # positions: coordinates of the objects, ring_positions()
-    # ring_order: object names (i.e., g1, g2 ...) in slot order
-    # radius_px: selection circle around each name, name_select_radius_px()
-
-    # output: object's name, or None if the point is not within the selection circle of any name
+    positions: from ring_positions(); ring_order: objects in slot order.
+    """
     for name, pos in zip(ring_order, positions):
         if math.dist(pos, point) < radius_px:
             return name
@@ -78,9 +70,8 @@ def object_at(point, positions, ring_order, radius_px):
 def pair_circle_radius():
     """Radius of the green feedback circle around a name and its object.
 
-    The circle is centred halfway between the name and the object, so it
-    must reach half the name-object distance plus half the object image.
-    The name is smaller than the object, so it fits too.
+    Centred halfway between them: half their distance plus half the object
+    size. The name is smaller than the object, so it fits too.
     """
     return GEOMETRY['feedbackNameOffset_px'] / 2 + GEOMETRY['objSize_px'] / 2
 
@@ -95,12 +86,11 @@ def _pair_circle_fits(name_pos, obj_pos):
 
 
 def feedback_obj_pos(name_pos):
-    """Where the object goes in feedback: feedbackNameOffset_px below the
-    name, or the same distance above it if the green circle would not fit
-    on screen below (with the current settings: the bottom slot only).
+    """Feedback object position: below the name, or above if the circle
+    would leave the screen (currently only the bottom slot).
 
-    Straight below rather than toward the centre: a name is much wider than
-    it is tall, so a sideways offset would put the object over the name.
+    Straight below, not toward the centre: names are wide, so a sideways
+    offset would put the object over the name.
     """
     x, y = name_pos
     d = GEOMETRY['feedbackNameOffset_px']
@@ -111,10 +101,9 @@ def feedback_obj_pos(name_pos):
 
 
 def check_feedback_fit():
-    """Stop if the feedback circle can leave the screen at any ring angle.
+    """Raise an error if the feedback circle can leave the screen.
 
-    Tries the ring at every whole degree (with ringRotation "random" a name
-    can sit at any angle) and places the object as feedback_obj_pos does.
+    Tests every whole degree, since "random" rotation allows any angle.
     """
     r_ring = GEOMETRY['ringRadius']
     for deg in range(360):
@@ -130,16 +119,13 @@ def check_feedback_fit():
 
 
 def adjacent_gap():
-    # Distance between two adjacent objects on the ring
-    # output: distance in pixels
+    """Distance in px between two adjacent ring slots."""
     pos = ring_positions(0)
     return math.dist(pos[0], pos[1])
 
 
 def check_tolerance(radius_px):
-    # Check if the selection circles of two adjacent names overlap.
-    # radius_px: from name_select_radius_px()
-
+    """Raise an error if selection circles of adjacent names overlap."""
     adj_gap = adjacent_gap()
 
     if adj_gap < 2 * radius_px:

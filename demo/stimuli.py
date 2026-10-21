@@ -1,28 +1,8 @@
-"""Stimuli: draw one image for every combination of the visual features.
+"""Draw one image per combination of the 6 binary visual features.
 
-This file knows only features, never attributes or CONTEXT. Which feature
-stands for which attribute is counterbalanced (config.ATTRIBUTES), so the
-images cannot depend on the context. design.object_image() picks the
-right image for each object in a session.
-
-The 6 features are present/absent (1 = present), each from a different
-guiding attribute in Wolfe & Horowitz (2017):
-    colour   orange fill instead of gray          colour
-    stripes  diagonal stripes                     orientation
-    outline  thick dark outline                   luminance polarity
-    hole     round hole in the centre             topological status
-    slot     cut at the top left, straight sides  line termination
-             and a rounded inner end
-    circle   circle instead of square             curvature
-No feature makes an object reach farther from its centre than the plain
-square's corners.
-
-File names are the feature values in config.IMAGE_NAME_ORDER. With
-IMAGE_NAME_ORDER = [colour, stripes, outline, hole, slot, circle],
-100001.png is an orange circle with nothing else.
-
-Run this file directly to draw all 64 images:
-    python stimuli.py
+Features only, not attributes: design.object_image() maps objects to images.
+File names are 0/1 digits in IMAGE_NAME_ORDER (100001.png = orange circle).
+Run to draw all 64 images:  python stimuli.py
 """
 
 import math
@@ -33,47 +13,44 @@ from PIL import Image, ImageDraw
 
 from config import IMAGE_NAME_ORDER, PATHS
 
-# Canvas and shapes, in pixels. PsychoPy scales the image down to
-# GEOMETRY["objSize_px"] on screen, so a large canvas keeps edges smooth.
+# Each feature is from a different guiding attribute in Wolfe & Horowitz
+# (2017): colour, orientation (stripes), luminance polarity (outline),
+# topological status (hole), line termination (slot), curvature (circle).
+# No feature reaches farther from the centre than the square's corners.
+
+# Sizes in pixels. PsychoPy scales the image down to
+# GEOMETRY["objSize_px"], so a large canvas keeps edges smooth.
 CANVAS = 1200
 CENTRE = CANVAS / 2
-SQUARE_HALF = 450                                 # centre to each side of the square
-# The circle has the same AREA as the square, so the two look about the same
-# size: pi * r^2 = (2 * half)^2  ->  r = half * 2 / sqrt(pi), about 508.
-# It is wider than the square at the sides, but still reaches less far
-# than the square's corners (about 636).
+SQUARE_HALF = 450                                 # centre to side
+# Circle has the same area as the square, so they look the same size:
+# r = half * 2 / sqrt(pi), about 508; still inside the corners (about 636).
 CIRCLE_RADIUS = SQUARE_HALF * 2 / math.sqrt(math.pi)
 
 OUTLINE_WIDTH = 40
 HOLE_RADIUS = 200
 SLOT_HALF_WIDTH = 70
-# The slot's inner end is at the same distance from the centre for both
-# shapes, so the gap between slot and hole is the same (118 px).
+# Same for both shapes, so the slot-to-hole gap is always about 118 px.
 SLOT_INNER = CIRCLE_RADIUS - 190
-STRIPE_PERIOD = 150          # stripes repeat every 150 px, measured along x
-STRIPE_WIDTH = 45            # dark part of each period, measured along x
+STRIPE_PERIOD = 150          # measured along x
+STRIPE_WIDTH = 45            # dark part of each period, along x
 
-GRAY = (200, 200, 200)       # the fill when "colour" is absent; lighter than
-                             # the mid-gray background so the shape stands out
+GRAY = (200, 200, 200)       # lighter than the mid-gray screen background
 ORANGE = (255, 102, 0)
 BLACK = (0, 0, 0)
 
 
-# --- shape ------------------------------------------------------------------
-
 def _draw_slot(draw, grow, fill):
-    """Draw the slot: a cut along the line from the centre to the top left,
-    with straight sides and a half-circle inner end.
+    """Draw the slot: a cut from the top-left edge toward the centre, with a
+    rounded inner end.
 
-    grow: widen it by this many pixels on every side (for the outline).
-    Its innermost point is SLOT_INNER - grow from the centre.
+    grow: widen by this many px on every side (used for the outline).
     """
-    # unit vector toward the top left, and one perpendicular to it
+    # u points to the top left (image y grows downward); v is perpendicular
     u = (-1 / math.sqrt(2), -1 / math.sqrt(2))
     v = (-u[1], u[0])
     half_w = SLOT_HALF_WIDTH + grow
-    # the half circle is centred SLOT_HALF_WIDTH beyond SLOT_INNER, so its
-    # inner edge lands exactly on SLOT_INNER (minus grow)
+    # Round end centred here, so its inner edge is at SLOT_INNER - grow
     end = SLOT_INNER + SLOT_HALF_WIDTH
     outer = SQUARE_HALF * math.sqrt(2) + 60       # past the square's corner
     rect = [(CENTRE + u[0] * s + v[0] * t, CENTRE + u[1] * s + v[1] * t)
@@ -85,11 +62,10 @@ def _draw_slot(draw, grow, fill):
 
 
 def _shape_mask(ft, inset=0, slot=True):
-    """True inside the object's outline (square or circle, minus the slot).
+    """Boolean mask of the shape (square or circle, minus the slot).
 
-    inset: move every edge inward by this many pixels. inset=0 is the shape
-    itself; inset=OUTLINE_WIDTH is the shape minus a band along its edge.
-    slot=False ignores the slot (used to draw the base shape before the cut).
+    inset: move every edge inward by this many px.
+    slot: False ignores the slot.
     """
     mask = Image.new("L", (CANVAS, CANVAS), 0)
     draw = ImageDraw.Draw(mask)
@@ -100,20 +76,17 @@ def _shape_mask(ft, inset=0, slot=True):
         h = SQUARE_HALF - inset
         draw.rectangle([CENTRE - h, CENTRE - h, CENTRE + h, CENTRE + h], fill=255)
     if slot and ft["slot"]:
-        # moving the edges in also widens the slot, so the band runs around it
+        # widen the slot too, so the outline band runs around it
         _draw_slot(draw, grow=inset, fill=0)
     return np.array(mask) > 0
 
 
-# Pixel coordinates, for the stripes and the hole
 _YY, _XX = np.mgrid[:CANVAS, :CANVAS]
 
 
-# --- one function per feature -----------------------------------------------
-# Each takes img, an RGBA array (CANVAS x CANVAS x 4) that it changes in
-# place, and ft, a dict {feature: 0/1} for this object. Each draws only its
-# own feature and draws nothing if its feature is 0, except ft_circle, which
-# draws the square when "circle" is 0, because the object needs a base shape.
+# Feature functions: change img (RGBA array) in place; ft = {feature: 0/1}.
+# Each does nothing when its feature is 0, except ft_circle, which then
+# draws the square base shape.
 
 def ft_circle(img, ft):
     """Base shape: circle (1) or square (0), filled gray."""
@@ -124,7 +97,7 @@ def ft_colour(img, ft):
     """Orange instead of gray, over the whole shape."""
     if not ft["colour"]:
         return
-    shape = img[..., 3] > 0                 # every pixel the shape covers
+    shape = img[..., 3] > 0                 # non-transparent pixels
     img[shape, :3] = ORANGE
 
 
@@ -133,18 +106,15 @@ def ft_stripes(img, ft):
     if not ft["stripes"]:
         return
     shape = img[..., 3] > 0
-    # x + y is constant along a diagonal, so every STRIPE_PERIOD in x + y
-    # starts a new stripe
+    # x + y is constant along a diagonal
     on = ((_XX + _YY) % STRIPE_PERIOD) < STRIPE_WIDTH
     img[shape & on] = (*BLACK, 255)
 
 
 def ft_outline(img, ft):
-    """Thick black band along the edge, following the slot if there is one.
+    """Thick black band along the edge, including the slot's edge.
 
-    It reads ft["slot"] so the band runs around the slot's edge too. The
-    band is the shape minus the same shape moved inward by OUTLINE_WIDTH, so
-    it is equally thick on every edge.
+    Shape minus the shape inset by OUTLINE_WIDTH, so equally thick everywhere.
     """
     if not ft["outline"]:
         return
@@ -169,12 +139,8 @@ def ft_hole(img, ft):
     img[inside] = 0
 
 
-# Feature name -> its drawing function.
-# The ORDER here is the drawing order, and it matters: later features are
-# drawn on top of earlier ones. The base shape comes first; colour and
-# stripes paint the shape; the outline goes over their edge; the slot and the
-# hole cut last, so they remove everything under them. This order is
-# separate from IMAGE_NAME_ORDER, which only sets the digit order in file names.
+# Dict order is drawing order: later features go on top, and slot and hole
+# cut last. Separate from IMAGE_NAME_ORDER (digit order in file names).
 FT_FUNCTIONS = {
     "circle": ft_circle,
     "colour": ft_colour,
@@ -185,13 +151,8 @@ FT_FUNCTIONS = {
 }
 
 
-# --- drawing ----------------------------------------------------------------
-
 def draw_obj(ft_row):
-    """Draw one image from a row in IMAGE_NAME_ORDER, e.g. [1, 0, 0, 0, 0, 1].
-
-    Returns the image; draw_c_obj() saves it.
-    """
+    """PIL image for one 0/1 row in IMAGE_NAME_ORDER, e.g. [1, 0, 0, 0, 0, 1]."""
     ft = dict(zip(IMAGE_NAME_ORDER, ft_row))
     img = np.zeros((CANVAS, CANVAS, 4), np.uint8)       # transparent
     for feature, ft_function in FT_FUNCTIONS.items():
@@ -200,8 +161,7 @@ def draw_obj(ft_row):
 
 
 def draw_c_obj():
-    """Draw all 2**6 = 64 feature combinations and save them to stimDir."""
-    # Stop if a feature has no drawing function, or a function no feature.
+    """Draw all 64 feature combinations and save them to PATHS["stimDir"]."""
     if sorted(FT_FUNCTIONS) != sorted(IMAGE_NAME_ORDER):
         raise ValueError(f"FT_FUNCTIONS has {sorted(FT_FUNCTIONS)} but "
                          f"IMAGE_NAME_ORDER has {sorted(IMAGE_NAME_ORDER)}; "
@@ -209,7 +169,6 @@ def draw_c_obj():
 
     out_dir = PATHS["stimDir"]
     out_dir.mkdir(parents=True, exist_ok=True)
-    # product gives every 0/1 row: (0,0,0,0,0,0), (0,0,0,0,0,1), ...
     for ft_row in product([0, 1], repeat=len(IMAGE_NAME_ORDER)):
         name = "".join(str(v) for v in ft_row) + ".png"
         draw_obj(ft_row).save(out_dir / name)

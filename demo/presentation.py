@@ -1,3 +1,6 @@
+"""The window and everything drawn in it: trial screens, text pages,
+question screens, the pause screen and the debrief letter.
+"""
 import functools
 import sys
 
@@ -5,6 +8,7 @@ from psychopy import core, event, visual
 from psychopy.visual.textbox2 import textbox2 as _tb2
 
 import design
+import eventlog
 import geometry
 from config import (DISPLAY, GEOMETRY, NAV_TEXT, PAGE_STYLE, PATHS,
                     PAUSE_BUTTONS, PRACTICE_NAMES, PRACTICE_OBJECTS,
@@ -21,8 +25,7 @@ def _rgb(hex_colour):
     return [int(h[i:i + 2], 16) / 127.5 - 1 for i in (0, 2, 4)]
 
 
-# Question screens: dark text and light boxes on the off-white background,
-# in the colours of PAGE_STYLE.
+# Question screen colours (PsychoPy rgb).
 INK = _rgb(PAGE_STYLE["ink"])
 DIM_TEXT = _rgb(PAGE_STYLE["muted"])
 BOX_FILL = _rgb(PAGE_STYLE["box"])          # typing boxes, options
@@ -31,26 +34,22 @@ OPTION_FILL = BOX_FILL
 CHOSEN_FILL = _rgb(PAGE_STYLE["chosen"])
 CHOSEN_LINE = _rgb(PAGE_STYLE["accent"])
 
-# Pictures a text page can show (config.SCREEN_TEXT, third part of a page)
+# Pictures a text page can show (third part of a SCREEN_TEXT page).
 TRIAL_PICTURES = ("dot", "names", "cue", "correct", "incorrect")
 
-# The bundled page fonts. TextBox2 finds them once registered (_build_page);
-# TextStim needs them passed as fontFiles each time.
+# TextBox2 finds these fonts once they are registered (_build_page).
+# TextStim needs them passed as fontFiles every time.
 FONT_FILES = [str(f) for f in sorted(PATHS["fontDir"].glob("*.ttf"))]
-# TextStim takes the first matching file of a family, so each weight gets
+# TextStim uses the first file of a family it finds, so each weight gets
 # only its own file.
 FONT_BODY = [str(PATHS["fontDir"] / "SourceSans3-Regular.ttf")]
 FONT_BODY_BOLD = [str(PATHS["fontDir"] / "SourceSans3-Semibold.ttf")]
-FONT_TITLE = [str(PATHS["fontDir"] / "SourceSerif4Display-Regular.ttf")]
 
 
 def _on_paper(method):
-    """Run a text screen on the off-white background, then restore the
-    background it had before (grey during calibration and trials).
+    """Decorator: show a text screen on white, then restore the old background.
 
-    Used as a decorator on every Presentation method that shows a text
-    screen. Nesting is safe: the pause screen inside an instruction page
-    restores off-white, and the page restores grey when it closes.
+    Nesting is safe: each call restores the colour it found.
     """
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
@@ -65,22 +64,21 @@ def _on_paper(method):
 
 
 class EndSession(Exception):
-    """The researcher chose End on the pause screen, or Esc after a failed
-    calibration. The data written so far stay saved and the session goes
-    to the debrief letter."""
+    """End the session early; saved data are kept and the debrief follows.
+
+    Raised by End on the pause screen, or when the learning criterion is
+    not met.
+    """
 
 
 class SkipSection(Exception):
-    """The researcher chose "Skip to next section" on the pause screen
-    during trials: the current phase (practice, learning or test) ends and
-    the session moves on to the next one."""
+    """"Skip to next section" during trials: end the current phase."""
 
 
 class RestartBlock(Exception):
-    """The researcher chose Continue on the pause screen during the trials.
+    """Continue or Recalibrate during trials: restart the current block.
 
-    The current trial and block are abandoned and the block starts again.
-    recalibrate: True if the researcher asked for a calibration first.
+    recalibrate: True if a calibration should run first.
     """
 
     def __init__(self, recalibrate):
@@ -88,55 +86,44 @@ class RestartBlock(Exception):
         self.recalibrate = recalibrate
 
 
-# The Presentation that draws the pause screen. Set in Presentation.__init__,
-# because check_escape() is also called from calibrate.py and response.py,
-# which have no Presentation of their own.
+# Draws the pause screen. Module-level because calibrate.py and response.py
+# call check_escape() without a Presentation.
 _pres = None
 
-# True only while trials run. It decides what Continue does: during trials
-# it abandons the block; at any other time the same screen carries on.
+# During trials, Continue restarts the block; otherwise it resumes the screen.
 _trials_running = False
 
 
 def set_trials_running(running):
-    """experiment.py calls this when trials start and stop."""
+    """Set by experiment.py when trials start and stop."""
     global _trials_running
     _trials_running = running
 
 
 def check_escape():
-    """Open the pause screen if Esc has been pressed since the last check.
+    """Open the pause screen if Esc was pressed. Call once per frame.
 
-    Called once per frame from every loop that can run for a while.
-    Returns normally if the participant carries on where they were;
-    otherwise raises EndSession or RestartBlock (see pause_menu).
-
-    Raising rather than calling core.quit() is deliberate: core.quit() calls
-    sys.exit() from inside pyglet's key handler, and pyglet swallows the
-    exception, so the script carries on and the caller's cleanup never runs.
-    An exception raised here travels up normally, so the finally blocks that
-    close LiveTrack and the window still execute.
+    May raise the exceptions of pause_menu. core.quit() is not used: pyglet
+    swallows its sys.exit(), so the cleanup code would not run.
     """
     if event.getKeys(keyList=['escape']):
         pause_menu()
 
 
 def pause_menu():
-    """Pause screen: the participant is asked to call the researcher.
+    """Pause screen; the researcher clicks an option.
 
-    The researcher clicks an option with the mouse:
-        Continue                    -> outside a block: return, the same
-                                       screen goes on; inside a block:
-                                       raise RestartBlock
-        Recalibrate, then continue  -> (inside a block only)
-                                       raise RestartBlock(recalibrate=True)
-        Skip to next section        -> (inside a block only)
-                                       raise SkipSection
-        End session                 -> confirm, then raise EndSession
+    Continue: return (outside trials) or raise RestartBlock (in trials).
+    Recalibrate (trials only): raise RestartBlock(recalibrate=True).
+    Skip to next section (trials only): raise SkipSection.
+    End session: confirm, then raise EndSession.
     """
-    if _pres is None:                   # no window yet: nothing to show
+    if _pres is None:                   # no window yet
         raise EndSession("Esc before the window opened")
 
+    # merge.py ends an interrupted trial at pause_on, so pause time is not
+    # trial time. No effect before recording starts.
+    eventlog.mark("pause_on", duringTrials=_trials_running)
     print("\nPAUSED. Click an option on the stimulus screen.")
     if _trials_running:
         options = ["continue", "recalibrate", "skip", "end"]
@@ -149,15 +136,17 @@ def pause_menu():
             danger=(options.index("end"),))]
         if chosen != "end":
             break
-        # Ending cannot be undone, so it is confirmed once
+        # Ending cannot be undone, so ask again.
         confirm = _pres.choose_button(
             SCREEN_TEXT["endConfirm"][0],
             [PAUSE_BUTTONS["back"], PAUSE_BUTTONS["endConfirm"]],
             danger=(1,))
         if confirm == 1:
+            eventlog.mark("pause_off", choice="end")
             raise EndSession("researcher chose End on the pause screen")
 
     print(f"Researcher chose: {chosen}")
+    eventlog.mark("pause_off", choice=chosen)
     event.clearEvents()                 # drop keys pressed during the pause
     if not _trials_running:
         return
@@ -167,20 +156,10 @@ def pause_menu():
 
 
 class Presentation:
-    """
-    Class for the window and drawable objects
-    """
+    """The window and all stimuli drawn in it."""
 
     def __init__(self):
-        """
-        1. open the window
-        2. build the fixation dot
-        3. build the message text
-        4. build the feedback circles and wrong mark
-        5. load the object images and build the name texts
-        6. decide the ring order
-        """
-        # window parameters from config.py
+        """Open the window and build all stimuli."""
         self.win = visual.Window(
             size=DISPLAY['size'],
             screen=DISPLAY['screen'],
@@ -191,7 +170,6 @@ class Presentation:
         )
 
 
-        # fixation dot
         self.fixation = visual.Circle(
             self.win,
             radius=GEOMETRY['centralDotRadius_px'],
@@ -199,12 +177,11 @@ class Presentation:
             lineColor="white",
         )
 
-        # instruction text
         self.message = visual.TextStim(
             self.win, text="", height=24, color="white", wrapWidth=850
         )
 
-        # feedback: green circle around the correct name and its object
+        # Feedback: green circle around the correct name and its object.
         self.pair_circle = visual.Circle(
             self.win,
             radius=geometry.pair_circle_radius(),
@@ -213,8 +190,7 @@ class Presentation:
             lineWidth=5,
         )
 
-        # feedback: red circle around a wrong name (feedbackWrongMark "o"),
-        # the same size as the green circle
+        # Red circle around a wrong name (feedbackWrongMark "o").
         self.wrong_circle = visual.Circle(
             self.win,
             radius=geometry.pair_circle_radius(),
@@ -223,8 +199,8 @@ class Presentation:
             lineWidth=5,
         )
 
-        # feedback X over a wrong choice: two crossing lines whose ends
-        # touch a circle the size of the green circle, so all marks match
+        # Red X over a wrong name ("x"). Its ends touch a circle the size of
+        # the green circle, so the marks match in size.
         arm = geometry.pair_circle_radius() / 2 ** 0.5
         self.wrong_mark = [
             visual.Line(self.win, start=(-arm, -arm), end=(arm, arm),
@@ -237,20 +213,16 @@ class Presentation:
             raise ValueError("GEOMETRY['feedbackWrongMark'] must be \"x\" or "
                              f"\"o\"; it is {GEOMETRY['feedbackWrongMark']!r}")
 
-        # Object images (centre cue, feedback), name texts (ring) and ring
-        # order come from the stimulus set in use. phase1 until use_set() is
-        # called.
+        # Build every set once so all names can be measured; start on phase1.
         self._built_sets = {}
         sets = design.stimulus_sets()
-        for stim_set in sets.values():   # build every set once, to measure it
+        for stim_set in sets.values():
             self.use_set(stim_set)
         self.use_set(sets["phase1"])
 
-        # Selection circle around each name: one radius for the whole
-        # session, from the widest name of all sets (practice, phase 1,
-        # phase 2), so the selection rule is the same in every phase.
-        # Measured here because a name's size on screen (boundingBox:
-        # width, height in px) is only known once its text exists.
+        # One name selection radius for the whole session, from the largest
+        # name of all sets, so the rule is the same in every phase.
+        # boundingBox is (width, height) in px, known only once a text exists.
         sizes = [text.boundingBox
                  for _, name_texts in self._built_sets.values()
                  for text in name_texts.values()]
@@ -266,17 +238,12 @@ class Presentation:
         self._build_page()
         self._mouse_parked = False      # set by park_mouse
 
-        # the pause screen is drawn in this window
         global _pres
         _pres = self
 
 
     def use_set(self, stim_set):
-        """Show this stimulus set (a design.StimulusSet) from now on.
-
-        Each set's images and names are built once and kept, so switching
-        back to a set does not load its images again.
-        """
+        """Use this design.StimulusSet from now on (each set is built once)."""
         if stim_set.label not in self._built_sets:
             names = {obj: visual.TextStim(self.win, text=name,
                                           height=GEOMETRY['height_name_px'],
@@ -289,9 +256,7 @@ class Presentation:
         self.stim_set = stim_set
 
     def _load_objects(self, stim_set):
-        """{object: drawable}: the image files, or plain shapes when the
-        set has no images (practice, config.PRACTICE_OBJECTS). Both have
-        .pos and .draw(), so the drawing code treats them the same."""
+        """Return {object: drawable}: images, or shapes for the practice set."""
         if stim_set.images is None:
             return {obj: self._practice_shape(PRACTICE_OBJECTS[obj])
                     for obj in stim_set.names}
@@ -301,13 +266,10 @@ class Presentation:
                 for obj, file_name in stim_set.images.items()}
 
     def _practice_shape(self, features, scale=1.0):
-        """One practice object: (colour, shape, size) -> a filled shape.
+        """Return one practice object, (colour, shape, size), as a shape.
 
-        Big: PRACTICE_SIZES["bigWidth_px"] wide; small: smallScale of that.
-        A triangle fills the same box as the square of its size (base and
-        height = width), so every object fits where the real objects go,
-        e.g. under its name in the feedback. scale shrinks it for the
-        trial pictures.
+        A triangle fills the same box as a square of its size, so it fits
+        where real objects go. scale: smaller copies for the trial pictures.
         """
         colour, shape, size = features
         width = PRACTICE_SIZES["bigWidth_px"] * scale
@@ -323,36 +285,27 @@ class Presentation:
                                 fillColor=colour, lineColor=None)
 
     def draw_fixation(self):
-        """Draw the central dot
-        """
+        """Draw the central dot."""
         self.fixation.draw()
 
     def draw_names(self, positions):
-        """Draw each object's name centred on its ring slot.
-        """
+        """Draw each name centred on its ring position."""
         for obj, pos in zip(self.ring_order, positions):
             text = self.name_texts[obj]
             text.pos = pos
             text.draw()
 
     def draw_object(self, target):
-        """Draw the target object in the centre (the go signal).
-        """
+        """Draw the target object in the centre (the go signal)."""
         image = self.obj_images[target]
         image.pos = (0, 0)
         image.draw()
 
     def draw_feedback(self, target, selection, positions):
-        """Draw the correct name with its object; all other names disappear.
+        """Draw the correct name and its object; hide the other names.
 
-        The object goes below the correct name, or above it near the
-        bottom of the screen (geometry.feedback_obj_pos).
-
-        correct:   correct name + object, green circle around the pair
-        incorrect: correct name + object, green circle around the pair, and
-                   the chosen name with a red X over it ("x") or a red
-                   circle around it ("o") (GEOMETRY['feedbackWrongMark'])
-        timeout:   correct name + object, no circle, no mark
+        Correct: green circle around the pair. Wrong: also the chosen name
+        with a red mark. Timeout (selection None): no circle, no mark.
         """
         name_pos = positions[self.ring_order.index(target)]
         obj_pos = geometry.feedback_obj_pos(name_pos)
@@ -363,7 +316,7 @@ class Presentation:
         image.pos = obj_pos
         image.draw()
 
-        if selection is None:          # timeout
+        if selection is None:
             return
 
         # halfway between name and object
@@ -384,30 +337,23 @@ class Presentation:
                 self.wrong_circle.draw()
 
     def set_background(self, hex_colour):
-        """Change the window background now (the next drawing uses it)."""
+        """Change the window background to a "#RRGGBB" colour."""
         self.win.color = _rgb(hex_colour)
         self.win.clearBuffer()
 
     def flip(self):
-        """ just flip() - update the screen
-        """
+        """Show what was drawn; returns the flip time."""
         return self.win.flip()
 
-    # --- text pages ------------------------------------------------------
-    # One look for every text screen: a dark card with a title, a line, the
-    # body, and a footer with the keys and page dots.
+    # --- text pages ---
 
     def _build_page(self):
-        """Create the page stimuli once; draw_page only changes their text.
+        """Build the page stimuli once; draw_page only changes their text.
 
-        Layout, top to bottom, all left edges on one column:
-            page count ("2 OF 4", several pages only)
-            title (serif), short accent line
-            body (sans)
-            hairline; footer: Back, page marks, Next
+        Layout, top to bottom, left-aligned: title, body, footer (Back, Next).
         """
         st = PAGE_STYLE
-        # The bundled fonts, so TextBox2 finds them by family name
+        # Register the bundled fonts so TextBox2 finds them by family name.
         _tb2.allFonts.addFontFiles(FONT_FILES)
 
         w, h = st["sheetSize"]
@@ -415,23 +361,14 @@ class Presentation:
         left, right = -st["columnWidth"] / 2, st["columnWidth"] / 2
         self._col = (left, right, top, bottom)
 
-        # Everything starts at the left edge of the text column
-        self._page_count = self._text(st["bodyFont"], 14, st["accent"],
-                                      (left, top - 56), (right - left, 22),
-                                      bold=True)
         self._page_title = self._text(st["titleFont"], st["titleHeight"],
                                       st["ink"], (left, top - 84),
-                                      (right - left, 60))
-        self._page_rule = visual.Rect(self.win, width=44, height=3,
-                                      pos=(left + 22, top - 158),
-                                      fillColor=_rgb(st["accent"]),
-                                      lineColor=None)
+                                      (right - left, 60), bold=True)
         self._page_body = self._text(st["bodyFont"], st["bodyHeight"],
-                                     st["body"], (left, top - 196),
+                                     st["body"], (left, top - 150),
                                      (right - left, 330),
                                      lineSpacing=st["lineSpacing"])
-        # A page without a title: its text in the vertical middle of the
-        # space between the top and the footer line, at the same left edge
+        # Page without a title: body centred between the top and the footer.
         self._page_body_mid = self._text(st["bodyFont"], st["bodyHeight"],
                                          st["body"],
                                          (left, (top + bottom + 74) / 2),
@@ -440,20 +377,16 @@ class Presentation:
                                          lineSpacing=st["lineSpacing"])
         footer_y = bottom + 44
         self._footer_y = footer_y
+        # Top of the footer area (nothing is drawn here). Notes and pictures
+        # go above it.
         self._hairline_y = bottom + 74
-        self._hairline = visual.Line(self.win, start=(left, bottom + 74),
-                                     end=(right, bottom + 74),
-                                     lineColor=_rgb(st["hairline"]),
-                                     lineWidth=1)
         self._page_back = self._text(st["bodyFont"], 18, st["muted"],
                                      (left, footer_y), (200, 30),
                                      anchor="left", text=NAV_TEXT["back"])
         self._page_next = self._text(st["bodyFont"], 18, st["ink"],
                                      (right, footer_y), (200, 30),
                                      anchor="right", bold=True)
-        self._page_mark = visual.Rect(self.win, width=26, height=3,
-                                      lineColor=None)
-        # Secondary note: smaller and grey, just above the footer line
+        # Small grey note just above the footer.
         self._page_note = self._text(st["bodyFont"], 18, st["muted"],
                                      (left, self._hairline_y + 18),
                                      (right - left, 60), anchor="bottom-left",
@@ -463,13 +396,12 @@ class Presentation:
             self.win, text="", height=17, color=_rgb(st["muted"]),
             font=st["bodyFont"], fontFiles=FONT_BODY)
 
-    # --- trial pictures on instruction pages --------------------------------
-    # A small copy of the trial screen, drawn with the practice objects and
-    # names (an example trial: target g2, wrong choice g0, ring not rotated).
-    # The names are drawn larger than to scale, so they stay readable.
+    # --- trial pictures on instruction pages ---
+    # Small copies of a practice trial: target g2, wrong choice g0, ring not
+    # rotated.
 
     def _build_pictures(self, s):
-        """The stimuli of a picture drawn at scale s (built once per s)."""
+        """Build the stimuli for pictures at scale s."""
         st = PAGE_STYLE
         w, h = DISPLAY["size"]
         pic = {"size": (w * s, h * s)}
@@ -499,8 +431,7 @@ class Presentation:
         return pic
 
     def _draw_picture(self, kind, centre, s):
-        """Draw one picture (TRIAL_PICTURES) at scale s, centred at
-        'centre'; no flip."""
+        """Draw one picture of kind TRIAL_PICTURES at scale s; no flip."""
         if kind not in TRIAL_PICTURES:
             raise ValueError(f"unknown picture {kind!r}; use one of "
                              f"{TRIAL_PICTURES}")
@@ -512,7 +443,7 @@ class Presentation:
         def at(point):                  # full-screen position -> picture
             return (cx + point[0] * s, cy + point[1] * s)
 
-        order = list(PRACTICE_NAMES)    # ring order of the practice set
+        order = list(PRACTICE_NAMES)
         full = geometry.ring_positions(0)
         target, wrong = "g2", "g0"
 
@@ -549,10 +480,9 @@ class Presentation:
                 mark.draw()
 
     def _draw_pictures(self, pictures):
-        """Pictures in a row above the page footer, captions under them.
+        """Draw pictures in a row above the footer, captions below them.
 
-        One picture: PAGE_STYLE["pictureScale"]. Several: smaller if needed,
-        so the row fits the text column.
+        Several pictures shrink if needed to fit the text column.
         """
         left, right, _, _ = self._col
         gap = 24
@@ -581,27 +511,20 @@ class Presentation:
             anchor=anchor, alignment=anchor, padding=0, **kwargs)
 
     def draw_page(self, pages, index, nav=True, fill=None):
-        """Draw page 'index' of 'pages' (a list of (title, body)); no flip.
+        """Draw pages[index], a (title, body[, extra]) tuple; no flip.
 
-        nav=False leaves out the footer (screens where the participant
-        presses nothing). fill: values for {} fields, e.g. {"round": 2}.
+        nav=False: no footer. fill: values for {} fields, e.g. {"round": 2}.
         """
-        st = PAGE_STYLE
         title, body = pages[index][:2]
-        # optional third part: [(picture, caption), ...], or a text, which
-        # is shown as a small grey note above the footer line
+        # extra: [(picture, caption), ...] or a note text
         extra = pages[index][2] if len(pages[index]) > 2 else None
         pictures = extra if isinstance(extra, list) else []
         note = extra if isinstance(extra, str) else ""
         if fill:
             title, body = title.format(**fill), body.format(**fill)
-        if len(pages) > 1:
-            self._page_count.text = f"{index + 1} OF {len(pages)}"
-            self._page_count.draw()
         if title:
             self._page_title.text = title
             self._page_title.draw()
-            self._page_rule.draw()
             self._page_body.text = body
             self._page_body.draw()
         else:
@@ -615,27 +538,18 @@ class Presentation:
         if not nav:
             return
 
-        self._hairline.draw()
         if index > 0:
             self._page_back.draw()
         last = index == len(pages) - 1
         self._page_next.text = NAV_TEXT["last"] if last else NAV_TEXT["next"]
         self._page_next.draw()
-        if len(pages) > 1:              # one mark per page, current in accent
-            for i in range(len(pages)):
-                self._page_mark.pos = ((i - (len(pages) - 1) / 2) * 34,
-                                       self._footer_y)
-                self._page_mark.fillColor = _rgb(
-                    st["accent"] if i == index else st["hairline"])
-                self._page_mark.draw()
 
     @_on_paper
     def show_pages(self, pages, fill=None, escape_exits=False):
         """Show text pages; right arrow = next, left arrow = back.
 
-        Returns after the right arrow on the last page.
-        Esc opens the pause screen; after Continue the same page is shown
-        again. escape_exits=True: Esc just returns instead (last screen).
+        Returns after the right arrow on the last page. Esc opens the pause
+        screen, or returns if escape_exits is True.
         """
         index = 0
         event.clearEvents()
@@ -656,9 +570,7 @@ class Presentation:
 
     @_on_paper
     def show_choice(self, pages, keys):
-        """One page without the footer (its text names the keys) until one
-        of 'keys' is pressed; returns that key. Esc opens the pause screen,
-        and after Continue the page is shown again."""
+        """Show one page without footer until one of keys is pressed; return it."""
         event.clearEvents()
         while True:
             self.draw_page(pages, 0, nav=False)
@@ -672,9 +584,8 @@ class Presentation:
     def choose_button(self, page, labels, danger=()):
         """Show one page with clickable buttons; return the clicked index.
 
-        For the researcher (pause screen). danger: indexes of buttons drawn
-        in the warning colour. The cursor is shown and moved onto the
-        stimulus screen, then hidden again afterwards if it was parked.
+        danger: indexes of buttons drawn in the warning colour. A parked
+        cursor is parked again afterwards.
         """
         st = PAGE_STYLE
         left, right, top, _ = self._col
@@ -694,7 +605,7 @@ class Presentation:
         mouse = event.Mouse(win=self.win, visible=True)
         self.win.mouseVisible = True
         mouse.setPos((0, top - 350))
-        # A button still held from before must not count as a click
+        # A button still held from before must not count as a click.
         while any(mouse.getPressed()):
             self.flip()
         mouse.clickReset()
@@ -711,7 +622,7 @@ class Presentation:
                 if hover and mouse.getPressed()[0]:
                     chosen = i
             self.flip()
-        while any(mouse.getPressed()):  # wait for release
+        while any(mouse.getPressed()):
             self.flip()
 
         self.win.mouseVisible = was_visible
@@ -721,7 +632,7 @@ class Presentation:
 
     def _label(self, text, y, height, color=INK, bold=False, x=0,
                align="center"):
-        """A text line for the question screens."""
+        """Return a text line for the question screens."""
         return visual.TextStim(self.win, text=text, pos=(x, y), height=height,
                                color=color, bold=bold, wrapWidth=900,
                                font=PAGE_STYLE["bodyFont"],
@@ -729,23 +640,19 @@ class Presentation:
                                anchorHoriz=align, alignText=align)
 
     def _title(self, text, y):
-        """The question line of a question screen: the page title font."""
+        """Return the question line, in semibold like page titles."""
         return visual.TextStim(self.win, text=text, pos=(0, y), height=32,
-                               color=INK, wrapWidth=900,
+                               color=INK, bold=True, wrapWidth=900,
                                font=PAGE_STYLE["titleFont"],
-                               fontFiles=FONT_TITLE)
+                               fontFiles=FONT_BODY_BOLD)
 
     @_on_paper
     def type_answer(self, question, allowed, progress="", hint="", max_len=20,
                     is_valid=None, optional=False):
-        """One question with a typing box; returns what was typed.
+        """Ask one question with a typing box; return the typed text.
 
-        Only characters in `allowed` are added, up to max_len. Backspace
-        deletes one character. Enter confirms once something is typed and,
-        if is_valid is given, is_valid(answer) is True; otherwise Enter is
-        ignored and the hint line states the rule.
-        A letter is upper case when Shift or Caps Lock is on (not both).
-        optional=True: Enter with nothing typed skips the question and
+        Only characters in allowed are accepted. Enter is ignored until
+        is_valid(answer) is True. optional=True: Enter on an empty box
         returns None.
         """
         draw = self._answer_screen(question, progress, hint)
@@ -758,7 +665,7 @@ class Presentation:
             for key, mods in event.getKeys(modifiers=True):
                 if key == "escape":
                     pause_menu()
-                    break                    # redraw; typed text is kept
+                    break                    # typed text is kept
                 if key in ("return", "num_enter") and not answer and optional:
                     return None
                 if key in ("return", "num_enter") and answer:
@@ -771,17 +678,14 @@ class Presentation:
                 char = KEY_CHARS.get(key, key)
                 if len(char) != 1:
                     continue                 # Shift, Tab, arrows, ...
+                # Upper case if Shift or Caps Lock is on, but not both.
                 if char.isalpha() and mods.get("shift") != mods.get("capslock"):
                     char = char.upper()
                 if char in allowed and len(answer) < max_len:
                     answer += char
 
     def _answer_screen(self, question, progress="", hint=""):
-        """Build the type_answer screen; returns draw(answer).
-
-        Separate from the key loop, so the screen can be drawn
-        without waiting for keys.
-        """
+        """Build the type_answer screen; return draw(answer)."""
         labels = [self._title(question, 124),
                   self._label("Press Enter to continue", -256, 20, DIM_TEXT)]
         if progress:
@@ -802,10 +706,9 @@ class Presentation:
 
     @_on_paper
     def choose_option(self, question, options, progress=""):
-        """Options in stacked boxes; returns the one pressed or clicked.
+        """Show options in boxes; return the one chosen by number key or click.
 
-        Chosen by its number key or by a mouse click. The chosen box turns
-        green for 0.3 s so the participant sees what was recorded.
+        The chosen box stays marked for 0.3 s so the participant sees it.
         """
         draw, boxes = self._option_screen(question, options, progress)
         numbers = [str(i) for i in range(1, len(options) + 1)]
@@ -834,10 +737,7 @@ class Presentation:
         return options[choice]
 
     def _option_screen(self, question, options, progress=""):
-        """Build the choose_option screen; returns (draw(chosen=None), boxes).
-
-        draw(i) shows box i as chosen. boxes are returned for mouse clicks.
-        """
+        """Build the choose_option screen; return (draw(chosen=None), boxes)."""
         labels = [self._title(question, 184),
                   self._label("Press a number", -296, 20, DIM_TEXT)]
         if progress:
@@ -862,18 +762,14 @@ class Presentation:
                 label.draw()
         return draw, boxes
 
-    # --- post-task questions --------------------------------------------
-    # All three screens are answered with the keyboard only, and all use the
-    # same rule: Enter confirms; Enter with no answer skips (returns None).
+    # --- post-task questions ---
+    # Keyboard only. Enter confirms; Enter with no answer skips (None).
 
     SKIP_HINT = ("Press Enter to continue. "
                  "You can press Enter without answering to skip")
 
     def _posttask_keys(self, keys):
-        """Open the pause screen on Esc; otherwise return the keys pressed.
-
-        After Continue, keys pressed before the pause are dropped.
-        """
+        """Return keys; on Esc, open the pause screen and return []."""
         if any(key == "escape" for key, _ in keys):
             pause_menu()
             return []
@@ -881,11 +777,7 @@ class Presentation:
 
     @_on_paper
     def type_long_answer(self, question, progress="", max_len=300):
-        """Open question with a large box; returns the text, or None if skipped.
-
-        Letters, digits, space and . , ' - ; / ? can be typed, up to max_len.
-        Backspace deletes one character.
-        """
+        """Ask an open question in a large box; return the text, or None."""
         draw = self._long_answer_screen(question, progress)
         answer = ""
         event.clearEvents()
@@ -904,21 +796,21 @@ class Presentation:
                 else:
                     char = KEY_CHARS.get(key, key)
                 if len(char) != 1:
-                    continue                 # Shift, Tab, arrows, ...
+                    continue
                 if char.isalpha() and shift != mods.get("capslock"):
                     char = char.upper()
                 if len(answer) < max_len:
                     answer += char
 
     def _long_answer_screen(self, question, progress=""):
-        """Build the type_long_answer screen; returns draw(answer)."""
+        """Build the type_long_answer screen; return draw(answer)."""
         labels = [self._title(question, 220),
                   self._label(self.SKIP_HINT, -290, 18, DIM_TEXT)]
         if progress:
             labels.append(self._label(progress, 300, 18, DIM_TEXT))
         box = visual.Rect(self.win, width=800, height=300, pos=(0, -20),
                           fillColor=BOX_FILL, lineColor=BOX_LINE, lineWidth=1.5)
-        # top-left of the box; long answers wrap onto new lines
+        # Anchored at the box's top-left, so long answers wrap downward.
         typed = visual.TextStim(self.win, text="", pos=(-385, 120), height=24,
                                 color=INK, wrapWidth=770,
                                 font=PAGE_STYLE["bodyFont"],
@@ -936,10 +828,9 @@ class Presentation:
 
     @_on_paper
     def choose_images(self, question, images, progress=""):
-        """Images in a row; returns the labels chosen, or None if skipped.
+        """Show images in a row; return the chosen labels, or None if skipped.
 
-        images: list of (image_path, label). Number key i turns choice i on
-        or off; any number of images can be chosen.
+        images: list of (image_path, label). Number keys toggle choices.
         """
         draw = self._images_screen(question, images, progress)
         numbers = [str(i) for i in range(1, len(images) + 1)]
@@ -955,10 +846,10 @@ class Presentation:
                     return [images[i][1] for i in sorted(chosen)]
                 digit = key.replace("num_", "")
                 if digit in numbers:
-                    chosen ^= {int(digit) - 1}   # on if off, off if on
+                    chosen ^= {int(digit) - 1}   # toggle
 
     def _images_screen(self, question, images, progress=""):
-        """Build the choose_images screen; returns draw(chosen)."""
+        """Build the choose_images screen; return draw(chosen)."""
         n = len(images)
         labels = [self._title(question, 220),
                   self._label(f"Press 1-{n} to choose or unchoose. "
@@ -968,7 +859,7 @@ class Presentation:
             labels.append(self._label(progress, 300, 18, DIM_TEXT))
         stims, frames = [], []
         for i, (path, label) in enumerate(images):
-            x = (i - (n - 1) / 2) * 150      # centred row, 150 px apart
+            x = (i - (n - 1) / 2) * 150      # px
             stims.append(visual.ImageStim(self.win, image=str(path),
                                           pos=(x, 0),
                                           size=GEOMETRY['objSize_px']))
@@ -990,10 +881,7 @@ class Presentation:
     @_on_paper
     def rate_scale(self, question, low_label, high_label, n_points=7,
                    progress=""):
-        """A 1..n_points rating; returns the number, or None if skipped.
-
-        A number key selects that point (a new key replaces it).
-        """
+        """Ask for a 1..n_points rating; return it, or None if skipped."""
         draw = self._scale_screen(question, low_label, high_label, n_points,
                                   progress)
         numbers = [str(i) for i in range(1, n_points + 1)]
@@ -1011,7 +899,7 @@ class Presentation:
 
     def _scale_screen(self, question, low_label, high_label, n_points,
                       progress=""):
-        """Build the rate_scale screen; returns draw(rating)."""
+        """Build the rate_scale screen; return draw(rating)."""
         labels = [self._title(question, 220),
                   self._label(f"Press 1-{n_points} (1 = {low_label}, "
                               f"{n_points} = {high_label})", 170, 20, DIM_TEXT),
@@ -1040,14 +928,12 @@ class Presentation:
                 label.draw()
         return draw
 
-    # --- end of session ---------------------------------------------------
-    # The feedback letter is drawn like a printed sheet: a light page on the
-    # gray screen, dark text, bold centred title, bold headings, left-aligned
-    # body, page number at the bottom.
+    # --- end of session ---
+    # The debrief letter is drawn as a light grey sheet on the white screen.
 
     LETTER_FONT = "Times New Roman"  # installed on macOS and Windows
-    SHEET_SIZE = (800, 720)         # width, height of the page, px
-    SHEET_MARGIN = 50               # page edge to text, px
+    SHEET_SIZE = (800, 720)         # width, height, px
+    SHEET_MARGIN = 50               # sheet edge to text, px
     LETTER_STYLES = {               # kind: (letter height px, bold, alignment)
         "title": (24, True, "center"),
         "heading": (20, True, "left"),
@@ -1055,10 +941,10 @@ class Presentation:
     }
 
     def _letter_paragraphs(self):
-        """Read the letter file; returns [(kind, text), ...].
+        """Read the letter file; return [(kind, text), ...].
 
-        Paragraphs are separated by an empty line. "# " starts the title,
-        "## " a heading; "# " notes before the title are skipped.
+        Paragraphs are split by empty lines. "# " marks the title, "## " a
+        heading. A block of "#" note lines before the title is skipped.
         """
         text = PATHS["debriefLetter"].read_text(encoding="utf-8")
         paragraphs = []
@@ -1069,17 +955,17 @@ class Presentation:
             elif block.startswith("# "):
                 if not paragraphs and all(line.startswith("#") for line in block.splitlines()) \
                         and "\n" in block:
-                    continue                     # notes at the top of the file
+                    continue
                 paragraphs.append(("title", block[2:]))
             elif block:
                 paragraphs.append(("body", block))
         return paragraphs
 
     def _text_height(self, stim, height):
-        """Height of a wrapped TextStim in px.
+        """Return a wrapped TextStim's height in px.
 
-        Uses PsychoPy's measured size; if this PsychoPy version does not
-        provide it, estimates from the number of characters.
+        Estimated from the character count if this PsychoPy version has no
+        boundingBox.
         """
         try:
             return stim.boundingBox[1]
@@ -1090,9 +976,10 @@ class Presentation:
             return lines * height * 1.25
 
     def _debrief_pages(self):
-        """Lay the letter out on sheet pages; returns a list of pages, each
-        a list of positioned TextStims. A paragraph that would run past the
-        bottom of the sheet starts the next page."""
+        """Lay the letter out on sheets; return a list of TextStim lists.
+
+        A paragraph that does not fit starts a new sheet.
+        """
         w, h = self.SHEET_SIZE
         text_w = w - 2 * self.SHEET_MARGIN
         top = h / 2 - self.SHEET_MARGIN + 10          # sheet centre is y = 10
@@ -1112,13 +999,13 @@ class Presentation:
                 y = top
             stim.pos = (x, y)
             pages[-1].append(stim)
-            y -= needed + 0.9 * size                  # space after each paragraph
+            y -= needed + 0.9 * size                  # gap after a paragraph
         return pages
 
     def _debrief_screen(self):
-        """Build the end screens; returns (draw(screen_n), n_screens).
+        """Build the end screens; return (draw(screen_n), n_screens).
 
-        Screen 0 is the thank-you message; screens 1.. are letter pages.
+        Screen 0 is the thank-you page; screens 1.. are letter sheets.
         """
         pages = self._debrief_pages()
         w, h = self.SHEET_SIZE
@@ -1145,11 +1032,10 @@ class Presentation:
 
     @_on_paper
     def show_debrief(self):
-        """Thank-you message, then the letter; arrows move back and forth.
+        """Show the thank-you page, then the letter; arrows move between them.
 
-        Right arrow on the last page ends the letter. Esc leaves the letter
-        early without opening the pause screen: the session's data are
-        already saved, so this is not an abort.
+        Esc leaves at once, without the pause screen: the data are already
+        saved.
         """
         draw, n_screens = self._debrief_screen()
         screen_n = 0
@@ -1168,12 +1054,10 @@ class Presentation:
                 screen_n += 1
 
     def park_mouse(self):
-        """Hide the cursor and move it to the experimenter's screen.
+        """Hide the cursor and move it to the centre of screen 0 (Windows only).
 
-        Moving it off the stimulus screen keeps it from sitting on the
-        stimuli, even if the window shows it again. Screen 0 (the primary
-        monitor) starts at (0, 0) in Windows' desktop coordinates, so its
-        centre is half its width and half its height.
+        Off the stimulus screen, it cannot cover stimuli even if shown again.
+        Screen 0 starts at (0, 0) in Windows desktop coordinates.
         """
         self._mouse_parked = True
         self.win.mouseVisible = False
@@ -1184,6 +1068,5 @@ class Presentation:
                                 user32.GetSystemMetrics(1) // 2)
 
     def close(self):
-        """close the window
-        """
+        """Close the window."""
         self.win.close()

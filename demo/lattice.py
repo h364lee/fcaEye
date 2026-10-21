@@ -1,3 +1,8 @@
+"""Build the formal context from config.CONTEXT and draw its concept lattice.
+
+Run:  python lattice.py   (prints each concept, saves out/lattice.png)
+"""
+
 from pathlib import Path
 
 from concepts import Context
@@ -6,18 +11,12 @@ from config import CONTEXT
 
 
 def mk_formal_context(context):
-    """
-    1. Takes CONTEXT
-    2. concepts.Context.fromdict() does not take 0/1 rows; 
-    it takes the positions of the attributes the object has. 
-    Each row is converted as such: e.g. [1, 1, 1, 0, 0, 0] -> [0, 1, 2].
-    3. Returns the context object.
-    """
+    """concepts.Context from a {object: 0/1 row} dict like CONTEXT."""
     objects = list(context)
     n_att = len(context[objects[0]])
-    # Attribute labels follow the column position, so m0 is column 0.
     properties = [f"m{j}" for j in range(n_att)]
 
+    # fromdict() wants attribute positions, not 0/1: [1, 1, 0] -> [0, 1]
     rows_as_positions = []
     for obj in objects:
         row = context[obj]
@@ -41,18 +40,17 @@ def draw_lattice(lattice):
         make_property_label=lambda props: ", ".join(props),
     )
 
-    dot.node_attr.update(width="0.12",          # node size
+    dot.node_attr.update(width="0.12",          # inches
                          fillcolor="steelblue",
                          color="steelblue")
-    dot.edge_attr.update(color="gray50",        # edges and their labels
+    dot.edge_attr.update(color="gray50",
                          fontsize="10",
                          fontname="Helvetica")
-    # nodesep: horizontal gap between nodes
     dot.graph_attr.update(nodesep="0.3", splines="line")
 
-    # out/ sits at the project root, next to demo/
+    # out/ is at the project root, next to demo/
     out_dir = Path(__file__).resolve().parent.parent / "out"
-    # cleanup=True deletes graphviz's text file and keeps only the PNG
+    # cleanup=True deletes graphviz's source file and keeps only the PNG
     path = dot.render(filename="lattice", directory=out_dir,
                       format="png", cleanup=True)
     print(f"saved to {path}")
@@ -61,7 +59,7 @@ def draw_lattice(lattice):
 if __name__ == "__main__":
     fc = mk_formal_context(CONTEXT)
 
-    # Each formal concept: (extent, intent) = (its objects, their shared attributes)
+    # extent = objects, intent = their shared attributes
     for extent, intent in fc.lattice:
         print(extent, intent)
 

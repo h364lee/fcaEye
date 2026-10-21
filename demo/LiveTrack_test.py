@@ -1,4 +1,7 @@
+"""Manual check that the LiveTrack tracker starts and returns a sample."""
+
 import sys
+# LiveTrack bindings are installed here, not in site-packages
 sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
 import LiveTrack
 import time
@@ -14,4 +17,4 @@ try:
     # ---------end--------------
 finally:
     LiveTrack.StopTracking()
-    LiveTrack.Close()
+    LiveTrack.Close()

@@ -1,11 +1,13 @@
-"""Trial data file
-    data/<id>_<date>_<time>.csv          tracker samples and event markers
-    data/<id>_<date>_<time>_trials.csv   this file
+"""Session and trial data files.
 
-Column order: participant, session, mappings, trial, event times, settings.
+    data/<id>_<date>_<time>.csv           tracker samples and markers
+                                          (LiveTrack, eventlog.py)
+    data/<id>_<date>_<time>_session.csv   one row of session-wide values
+    data/<id>_<date>_<time>_trials.csv    one row per trial
 
-Each row is written as soon as its trial ends, so a crash loses
-at most the trial that was running.
+Join on participantID. The session file is written after recording starts.
+Each trial row is saved when its trial ends, so a crash loses at most the
+running trial.
 """
 
 import csv
@@ -16,7 +18,7 @@ import config
 import design
 from config import NAMES, OBJECT_SETS
 
-# Settings groups copied into the file, one column per key, as "GROUP.key".
+# Config groups copied to the session file as "GROUP.key" columns.
 SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "ORDER", "EULER_TOUR", "PHASES",
             "COUNTERBALANCE", "DEMO_TRIALS",
             "DWELL_SELECTION", "CENTRAL_FIXATION", "CALIBRATION"]
@@ -35,21 +37,21 @@ EVENT_TIMES = {
 
 
 def tracker_column(column):
-    """Tracker-clock of an event column: "objectOn_s" -> "objectOnTracker_us"."""
+    """Tracker-clock column of an event: "objectOn_s" -> "objectOnTracker_us"."""
     return column.removesuffix("_s") + "Tracker_us"
 
 _file = None
 _writer = None
-_settings = None
+_participant_id = None
 
 
 def session_columns(participant, accuracy, session_start, screen_rate,
                     tracker_rate, tracked_eyes, stim_sets,
                     calibration_attempts):
-    """Everything that is the same for every trial, except the settings.
+    """Session-wide values, except the config settings.
 
-    stim_sets: the design.StimulusSets this session uses. Each gets its
-    own columns, e.g. "phase1_context", "phase1_g0Name".
+    Each design.StimulusSet in stim_sets gets its own columns, e.g.
+    "phase1_context", "phase1_g0Name".
     """
     columns = dict(participant)
     columns.update({
@@ -58,7 +60,7 @@ def session_columns(participant, accuracy, session_start, screen_rate,
     })
     columns.update({
         "sessionStart": session_start,
-        # Software that ran this session, to trace version differences later
+        # To trace version differences later
         "pythonVersion": platform.python_version(),
         "psychopyVersion": version("psychopy"),
         "os": platform.platform(),
@@ -98,12 +100,10 @@ def settings_columns():
 
 def trial_column_names():
     """Column names of the dict run_trial returns, in file order."""
-    # phase: practice, learning1, test1, learning2, test2
-    # stimSet: practice, phase1 or phase2 (the design table's phases)
-    # attempt: 1, or 2+ if the block was abandoned (pause screen) and run
-    #   again; keep the last attempt of each block.
-    # blockSeed: rebuilds the block's trial order (design.shuffled_sequence
-    #   for practice and learning, design.trial_sequence for test)
+    # phase: practice, learning1, test1 (learning2, test2 are off for now)
+    # attempt: 2+ if the block was abandoned and run again; keep the last.
+    # blockSeed: rebuilds the trial order (design.shuffled_sequence for
+    #   practice and learning, design.trial_sequence for test)
     names = ["phase", "block", "attempt", "stimSet", "blockSeed", "feedback",
              "trialN", "targetObj", "previousObj", "name", "targetImage",
              "rotation_deg"]
@@ -117,29 +117,41 @@ def trial_column_names():
     return names
 
 
-def open_file(tracker_path, session):
-    """Create the trial file next to the tracker file and write the header."""
-    global _file, _writer, _settings
-    _settings = settings_columns()
-    path = tracker_path.with_name(tracker_path.stem + "_trials.csv")
-    _file = open(path, "w", newline="", encoding="utf-8")
-    # A key that is not in fieldnames raises an error on the first row,
-    # so a misspelled column is found at once, not during analysis.
-    fieldnames = list(session) + trial_column_names() + list(_settings)
-    _writer = csv.DictWriter(_file, fieldnames=fieldnames)
+def open_files(tracker_path, participant_id, session):
+    """Write the session file and open the trial file next to the tracker
+    file. Returns (session_path, trials_path).
+
+    Session file columns: participantID, session, then "GROUP.key" settings.
+    """
+    global _file, _writer, _participant_id
+    _participant_id = participant_id
+
+    session_path = tracker_path.with_name(tracker_path.stem + "_session.csv")
+    row = {"participantID": participant_id, **session, **settings_columns()}
+    with open(session_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(row))
+        writer.writeheader()
+        writer.writerow(row)
+
+    trials_path = tracker_path.with_name(tracker_path.stem + "_trials.csv")
+    _file = open(trials_path, "w", newline="", encoding="utf-8")
+    # An unknown key raises an error on the first row, so a misspelled
+    # column is found at once, not during analysis.
+    _writer = csv.DictWriter(_file,
+                             fieldnames=["participantID"] + trial_column_names())
     _writer.writeheader()
     _file.flush()
-    return path
+    return session_path, trials_path
 
 
-def write_row(session, trial):
-    """Write one trial with the session values and settings; save it now."""
-    _writer.writerow({**session, **trial, **_settings})
+def write_row(trial):
+    """Write one trial row and flush it to disk."""
+    _writer.writerow({"participantID": _participant_id, **trial})
     _file.flush()
 
 
 def close_file():
-    """Safe to call if the file was never opened."""
+    """Close the trial file. Safe if it was never opened."""
     global _file, _writer
     if _file is not None:
         _file.close()

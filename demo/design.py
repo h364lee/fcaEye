@@ -1,9 +1,7 @@
-"""Experiment side: counterbalancing, i.e. which image each object shows.
+"""Counterbalancing, stimulus sets, trial orders, and design checks.
 
-An object's image follows from its row in config.CONTEXT (attributes) and
-config.ATTRIBUTES (which feature stands for each attribute). The row is
-reordered into the fixed feature order of config.IMAGE_NAME_ORDER, which
-is the file name of the image stimuli.py drew.
+An object's image file name is its CONTEXT row, mapped to features by
+ATTRIBUTES and written in IMAGE_NAME_ORDER (see stimuli.py).
 """
 
 import random
@@ -23,39 +21,29 @@ from eulerTours import euler
 
 
 def object_image(obj, context=CONTEXT, object_set=1):
-    """Image file name for one object, e.g. "110000.png".
+    """Image file name for one object, e.g. "111000.png".
 
-    Example: CONTEXT["g0"] = [1, 1, 1, 0, 0, 0] (has m0, m1, m2). If
-    m0 = fill, m1 = disk, m2 = stripes, then g0 shows fill + disk + stripes.
-    In IMAGE_NAME_ORDER (fill, disk, stripes, dots, outline, notch) that is
-    111000.png. With another mapping, the same row gives another file.
+    The same row gives a different file under a different ATTRIBUTES mapping.
     """
     attributes = OBJECT_SETS[object_set]["attributes"]
     name_order = OBJECT_SETS[object_set]["imageNameOrder"]
-    # attribute row -> {feature: 0/1}
     ft = {}
     for attr, value in zip(attributes, context[obj]):
         ft[attributes[attr]["feature"]] = value
-    # {feature: 0/1} -> digits in the fixed feature order
     return "".join(str(ft[feature]) for feature in name_order) + ".png"
 
 
 @dataclass
 class StimulusSet:
-    """Everything that differs between the practice and the two halves.
+    """Names, context and images for the practice or one phase.
 
-    All sets use the object labels g0-g7, so the trial file keeps the same
-    columns; the "stimSet" column says which set a trial used.
+    All sets use labels g0-g7, so trial files keep the same columns.
 
-    label:        "practice", "phase1" or "phase2"
-    names:        {object: name}
-    context:      {object: attribute row}, or None for the practice
-    images:       {object: image file name}, or None for the practice
-                  (Presentation draws white circles instead)
-    ring_order:   objects in ring-slot order
-    stim_dir:     folder of the images (None for the practice)
-    context_label, object_set: the design-table cells this set was built
-                  from (empty for the practice)
+    label:      "practice", "phase1" or "phase2"
+    context:    {object: attribute row}; None for the practice
+    images:     {object: image file name}; None for the practice
+    ring_order: objects in ring-slot order
+    context_label, object_set: the GROUP_CELLS entry used (empty for practice)
     """
     label: str
     names: dict
@@ -84,10 +72,9 @@ def phase2_relation():
 
 
 def stimulus_sets():
-    """The practice set and one set per phase, by label.
+    """{label: StimulusSet} for the practice and both phases.
 
-    Each phase takes its context and object set (with its names) from the
-    row of config.GROUP_CELLS chosen by COUNTERBALANCE["groupCell"].
+    Phases use the GROUP_CELLS row chosen by COUNTERBALANCE["groupCell"].
     """
     sets = {"practice": StimulusSet("practice", PRACTICE_NAMES, None, None,
                                     list(PRACTICE_NAMES))}
@@ -109,44 +96,33 @@ def stimulus_sets():
 
 
 def new_seed():
-    """A seed for one block. Saved in the trial file, so the block's order
-    can be rebuilt."""
+    """Seed for one block; saved so the block's order can be rebuilt."""
     return random.randint(1, 9999)
 
 
 def shuffled_sequence(seed, objects, n_trials):
-    """n_trials targets in random order; each object equally often when
-    n_trials is a multiple of the object count (learning blocks), otherwise
-    as close to that as possible (a 1-trial practice round: one random
-    object).
+    """n_trials targets in random order, each object as equally often as possible.
 
-    A separate random generator, so the seed does not affect other random
+    Uses its own random generator, so the seed does not fix other random
     values (preview jitter, rotation).
     """
-    repeats = -(-n_trials // len(objects))          # n / count, rounded up
+    repeats = -(-n_trials // len(objects))          # rounded up
     sequence = list(objects) * repeats
     random.Random(seed).shuffle(sequence)
     return sequence[:n_trials]
 
 
 def trial_sequence(seed, objects=None):
-    """Target object of every trial, e.g. ["g3", "g0", "g5", ...].
+    """Test-block targets from an Euler tour, e.g. ["g3", "g0", "g5", ...].
 
-    An Euler tour on the graph with one edge per ordered pair i -> j, so
-    every transition between consecutive trials appears exactly
-    tour_repeats times. euler.py labels objects "0".."7"; label "3" is the
-    4th object in CONTEXT, i.e. "g3".
-
-    The same seed always gives the same sequence, so a session's sequence
-    can be rebuilt from the seed saved in its data file.
+    Each transition i -> j appears exactly tour_repeats times. The same
+    seed always gives the same sequence.
     """
     if objects is None:
         objects = list(CONTEXT)
 
-    # euler.py draws from Python's shared random generator, which the
-    # experiment also uses (preview jitter, ring rotation). Seed it only for
-    # this call, then put its state back, so the seed does not also fix
-    # those other random values.
+    # euler.py uses the shared random generator. Restore its state after,
+    # so this seed does not fix preview jitter or ring rotation.
     saved_state = random.getstate()
     random.seed(seed)
     try:
@@ -157,19 +133,17 @@ def trial_sequence(seed, objects=None):
     finally:
         random.setstate(saved_state)
 
+    # euler.py labels are "0", "1", ...: positions in objects
     return [objects[int(label)] for label in labels]
 
 
 def image_code(obj):
-    """An object's attribute row as text, e.g. "1 1 0".
-
-    Spaces keep a leading 0 when the data file is read back.
-    """
+    """CONTEXT row as text, e.g. "1 1 0"; spaces keep a leading 0 on read-back."""
     return " ".join(str(value) for value in CONTEXT[obj])
 
 
 def attributes_text(attributes=ATTRIBUTES):
-    """The coding in one cell: "m1:size[1=big/0=small];m2:...".
+    """Attribute coding as one cell, e.g. "m0:colour[1=orange/0=gray];...".
 
     No commas, so the cell stays readable in a plain text editor.
     """
@@ -178,10 +152,7 @@ def attributes_text(attributes=ATTRIBUTES):
 
 
 def check_design():
-    """Stop before anything opens if the counterbalancing values do not fit.
-
-    Each check names what is wrong, so the fix is clear from the message.
-    """
+    """Raise an error before anything opens if the config values do not fit."""
     expected = [f"m{j}" for j in range(len(ATTRIBUTES))]
     if list(ATTRIBUTES) != expected:
         raise ValueError(f"ATTRIBUTES keys must be {expected} in this order, "
@@ -251,7 +222,6 @@ def check_design():
         raise ValueError(f"COUNTERBALANCE['groupCell'] must be one of "
                          f"{list(GROUP_CELLS)}; it is "
                          f"{COUNTERBALANCE['groupCell']!r}")
-    # Every cell: known contexts, and both object sets, one per phase
     for n, cell in GROUP_CELLS.items():
         contexts = [context for context, _ in cell]
         sets = [object_set for _, object_set in cell]
@@ -261,7 +231,7 @@ def check_design():
         if sorted(sets) != sorted(OBJECT_SETS):
             raise ValueError(f"GROUP_CELLS[{n}] = {cell}: each of "
                              f"{list(OBJECT_SETS)} must appear once")
-    # The table must hold each combination once (2 x 2 x 2)
+    # Each combination (2 x 2 x 2) must appear once
     combos = {(cell[0][0], cell[0][0] == cell[1][0], cell[0][1])
               for cell in GROUP_CELLS.values()}
     if len(combos) != len(GROUP_CELLS):
@@ -282,9 +252,8 @@ def check_design():
 
     images = {obj: object_image(obj) for obj in CONTEXT}
 
-    # With features standing for attributes, equal rows mean equal images.
-    # A formal context may have equal rows, so this only warns; but the
-    # participant cannot tell such objects apart by how they look.
+    # Equal rows give equal images. A formal context allows this, so only
+    # warn; but participants cannot tell such objects apart.
     seen = {}
     for obj, image in images.items():
         if image in seen:
@@ -292,7 +261,7 @@ def check_design():
                   f"CONTEXT, so both will show {image}")
         seen.setdefault(image, obj)
 
-    # Every image either half will show
+    # Both phases are checked, although phase 2 is not run for now
     for half in (stimulus_sets()["phase1"], stimulus_sets()["phase2"]):
         missing = [image for image in half.images.values()
                    if not (half.stim_dir / image).exists()]

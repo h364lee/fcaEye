@@ -1,6 +1,4 @@
-"""
-Gaze calibration - 2026-09-14
-"""
+"""LiveTrack gaze calibration."""
 
 import sys
 sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
@@ -17,26 +15,17 @@ from presentation import check_escape
 
 
 def gaze_calibration(win):
-    """Run one calibration pass and report the accuracy achieved.
+    """Run one calibration pass and return the accuracy per eye.
 
-    Assumes LiveTrack.Init(), SetResultsTypeRaw() and StartTracking()
-    have already been called, and that raw results are still selected --
-    the fixation check reads pupil/glint vectors, not gaze coordinates.
+    Needs LiveTrack.Init(), SetResultsTypeRaw() and StartTracking() first:
+    the fixation check reads raw pupil/glint vectors.
 
-    Args:
-        win: an open psychopy.visual.Window. Not created or closed here.
-
-    Returns:
-        dict with one entry per eye that was calibrated, e.g.
-            {"left":  {"accuracy_deg": 0.34, "n_points": 9},
-             "right": {"accuracy_deg": 0.41, "n_points": 8}}
-        An eye that is not tracked, or that acquired no fixations at
-        all, is left out of the dict entirely.
+    Returns e.g. {"left": {"accuracy_deg": 0.34, "n_points": 9}, ...}.
+    An eye that is not tracked or got no fixations is left out.
     """
     targets_deg = np.array(CALIBRATION["targets_deg"])
     n_targets = targets_deg.shape[0]
 
-    # --- 1. degrees -> pixels -------------------------------------------
     screen_res_px = DISPLAY["size"]                  # [width_px, height_px]
     screen_size_mm = CALIBRATION["screenSize_mm"]   # [width_mm, height_mm]
     view_dist_mm = CALIBRATION["viewDist_mm"]
@@ -47,12 +36,10 @@ def gaze_calibration(win):
 
     target_pos_px = targets_deg * px_per_deg
 
-    # --- 2. shuffle target order ----------------------------------------
     order = np.arange(n_targets)
     np.random.shuffle(order)
     target_pos_px = target_pos_px[order]
 
-    # --- 3. acquire a fixation at each target ---------------------------
     fix_dot_in_px = CALIBRATION["fixInDot_deg"] * px_per_deg
     fix_dot_out_px = CALIBRATION["fixOutDot_deg"] * px_per_deg
     min_dur_s = CALIBRATION["minFixDur_ms"] / 1000
@@ -95,8 +82,7 @@ def gaze_calibration(win):
             elapsed = time.time() - t0
             d = LiveTrack.GetBufferedEyePositions(0, fix_dur_samples, 0)
 
-            # Only judge a full window. Guards max()/min() against an
-            # empty buffer, which would raise ValueError.
+            # Only judge a full window; max()/min() fail on an empty buffer.
             if len(d) >= fix_dur_samples:
                 vect_x = LiveTrack.GetFieldAsList(d, "VectX")
                 vect_y = LiveTrack.GetFieldAsList(d, "VectY")
@@ -134,7 +120,6 @@ def gaze_calibration(win):
                     got_fix_right = True
                     print(f"Target {i + 1}: right eye fixation acquired")
 
-            # Every enabled eye has a fixation -- blank the dot and move on.
             if (got_fix_left or not track_left) and (got_fix_right or not track_right):
                 win.flip()
                 break
@@ -147,13 +132,10 @@ def gaze_calibration(win):
                 win.flip()
                 break
 
-    # --- 4. drop targets where no fixation was acquired -----------------
-    # Done per eye, so a target one eye missed does not discard the
-    # other eye's good data.
+    # Drop missed targets per eye, so one eye's miss keeps the other's data.
     idx_left = [i for i in range(n_targets) if vect_x_left[i] is not None]
     idx_right = [i for i in range(n_targets) if vect_x_right[i] is not None]
 
-    # --- 5 & 6. fit, then convert the error to degrees ------------------
     def calibrate_eye(eye_index, idx, vx, vy, gx, gy):
         """Fit one eye. eye_index is 0 for left, 1 for right."""
         if not idx:
@@ -166,16 +148,14 @@ def gaze_calibration(win):
         glint_x = [float(gx[i]) for i in idx]
         glint_y = [float(gy[i]) for i in idx]
 
-        # The fit itself happens inside the compiled CRS library. The
-        # glint reference is the median across the whole calibration,
-        # not per target.
+        # The fit runs in the CRS library. The glint reference is the
+        # median over all targets.
         cal_err = LiveTrack.CalibrateDevice(
             eye_index, len(idx), tgt_x, tgt_y, vect_x, vect_y,
             view_dist_mm, np.median(glint_x), np.median(glint_y),
         )
 
-        # cal_err is a summed squared error in pixels; per-point RMS is
-        # sqrt(err / n), then pixels -> degrees.
+        # cal_err is a summed squared error in pixels; RMS is sqrt(err / n).
         accuracy_px = math.sqrt(float(cal_err) / len(idx))
         return {"accuracy_deg": accuracy_px / px_per_deg,
                 "n_points": len(idx)}
@@ -199,12 +179,12 @@ def gaze_calibration(win):
 
 
 def report_calibration(pres, result, attempt=1):
-    """Report the accuracy in the terminal, for the experimenter only.
+    """Print the accuracy for the experimenter; return True if it passes.
 
-    Passes only if BOTH eyes were calibrated and each error is below
-    CALIBRATION["calibrationCriterion_deg"]: both eyes must be trackable
-    (screening criterion). Participants never see the numbers (Screen 4 or
-    4b in experiment.main). pres is kept so the call stays the same.
+    Passes only if both eyes were calibrated and each error is below
+    CALIBRATION["calibrationCriterion_deg"] (screening criterion).
+    The participant sees only pass or fail (experiment.run_calibration).
+    pres is unused.
     """
     threshold = CALIBRATION["calibrationCriterion_deg"]
     print(f"\n--- Calibration attempt {attempt} "

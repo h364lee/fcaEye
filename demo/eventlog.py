@@ -1,6 +1,4 @@
-"""Event markers in the data file.
-
-Comment format, one event per comment:
+"""Event markers in the tracker data file, one per comment:
     event=object_on trial=3
 """
 
@@ -18,22 +16,18 @@ from config import PATHS
 _open = False
 _last_sent = 0.0
 
-# The tracker keeps one waiting comment and writes it on its next sample
-# (every 2 ms). A second comment sent before that sample replaces the first,
-# and the call still reports success. So markers are kept at least this far
-# apart. Trial markers are always further apart (a screen flip lies between
-# them), so in practice only back-to-back markers such as the two
-# calibration markers are delayed.
+# The tracker holds one comment and writes it on its next sample (every
+# 2 ms). A second comment sent before that sample replaces the first, and
+# the call still reports success. So markers are kept this far apart.
+# Trial markers have a screen flip between them, so only markers sent back
+# to back are delayed.
 MIN_GAP_S = 0.004
 
 
 def open_session(participant_id):
     """Start writing tracker data to data/<id>_<YYYYmmdd_HHMMSS>.csv.
 
-    Call before StartTracking(), the order CRS's demos use.
-
-    Returns:
-        the file path.
+    Call before StartTracking() (the order CRS's demos use). Returns the path.
     """
     global _open
     data_dir = PATHS['dataDir']
@@ -51,21 +45,18 @@ def open_session(participant_id):
 def tracker_time_us():
     """Tracker timestamp (us) of the newest sample that has reached the PC.
 
-    Taken right after a screen change, it places the change on the
-    tracker's clock without depending on a marker. It trails the true
-    moment by the transfer delay from the tracker; merge.py measures that
-    delay by comparing it with the marker's sample.
+    Gives a screen change's tracker time without a marker. It trails the
+    true moment by the transfer delay; merge.py measures that delay
+    against the marker's sample.
     """
     return LiveTrack.GetLastResult().Timestamp
 
 
 def mark(event, **fields):
-    """Write one event marker. Does nothing if no session is open.
+    """Write one event marker. No-op if no session is open.
 
-    Fields become key=value pairs after the event name.
-
-    Commas are refused: the comment goes into one CSV column, and a comma
-    would split it across two.
+    Commas are refused: the comment is one CSV column, and a comma would
+    split it in two.
     """
     if not _open:
         return
@@ -81,8 +72,8 @@ def mark(event, **fields):
     while time.perf_counter() - _last_sent < MIN_GAP_S:
         pass
 
-    # The binding prints a success line on every call; at eight events a
-    # trial that buries real messages. Silence it and check the result.
+    # The binding prints a success line on every call, which hides real
+    # messages. Silence it and check the result instead.
     with contextlib.redirect_stdout(io.StringIO()):
         result = LiveTrack.SetDataComment(text)
     _last_sent = time.perf_counter()
@@ -96,8 +87,7 @@ def close_session():
     if not _open:
         return
 
-    # A comment attaches to the *next* sample. Wait a few samples so the
-    # final marker is not lost when the file closes.
+    # A comment lands on the next sample. Wait so the last marker is written.
     time.sleep(0.05)
     LiveTrack.CloseDataFile()
     _open = False
