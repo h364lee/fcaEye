@@ -6,7 +6,6 @@ test 1 -> post-task questions -> thank you, debrief letter.
 Esc opens the pause screen (presentation.pause_menu).
 """
 
-import csv
 import random
 import sys
 from datetime import datetime
@@ -49,8 +48,8 @@ def ask_demographics(pres):
             "gender": gender}
 
 
-def posttask_q(pres, tracker_path):
-    """Ask the post-task questions; save to <tracker file>_posttask.csv."""
+def posttask_q(pres):
+    """Ask the post-task questions; save the answers in the session file."""
     # Q3 image for each feature: only that feature present, e.g. 100000.png
     images = []
     for feature in IMAGE_NAME_ORDER:
@@ -67,12 +66,8 @@ def posttask_q(pres, tracker_path):
     answers["q4Difficulty"] = pres.rate_scale(POSTTASK["q4"], *POSTTASK["q4Ends"],
                                               progress="Question 4 of 4")
 
-    path = tracker_path.with_name(tracker_path.stem + "_posttask.csv")
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(answers))
-        writer.writeheader()
-        writer.writerow(answers)          # None is written as an empty cell
-    print(f"Post-task answers to {path}")
+    path = trialdata.update_session(answers)
+    print(f"Post-task answers added to {path}")
     return answers
 
 
@@ -554,7 +549,7 @@ def main():
 
         eventlog.mark("trials_end")
         pres.show_pages(SCREEN_TEXT["taskEnd"])
-        posttask_q(pres, path)
+        posttask_q(pres)
         eventlog.mark("session_end")
         pres.show_debrief()
     except EndSession as e:
@@ -574,6 +569,8 @@ def main():
         LiveTrack.StopTracking()
         LiveTrack.ClearDataBuffer()
         LiveTrack.Close()
+        # Files are closed; the window stays until the researcher presses Esc.
+        pres.show_end()
         pres.close()
 
     print(participant)

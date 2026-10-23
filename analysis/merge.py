@@ -1,25 +1,26 @@
-"""Turn one session's tracker file into two analysis files.
+"""Turn one session's tracker file into one analysis file, _gaze.csv.
 
 Run by hand after a session:
     cd analysis
     python merge.py                                        # newest session in data/
-    python merge.py ../data/877787_20260925_132503_trials.csv
+    python merge.py ../data/877787_20260925/877787_20260925_trials.csv
     python merge.py 000001 877787                          # every session of these SONA IDs
 
-Inputs, all in data/ and sharing one stem <id>_<date>_<time>:
+Each session has its own folder, data/<stem>/, with stem <id>_<date>
+(YYYYmmdd; a second session that day has _2, _3 ...). Inputs in it:
     <stem>.csv            the LiveTrack file (one row every 2 ms, markers in Comment)
     <stem>_trials.csv     one row per completed trial
     <stem>_session.csv    one row of values that are the same for the whole session
 
-Outputs, next to the inputs:
+Output, in the same folder:
     <stem>_gaze.csv       one row per tracker sample (every 2 ms)
         participantID, Timestamp, psychopyTime_s,
         trialN, trialRecorded, phase, block, attempt, blockStatus,
         targetObj, previousObj, trialPhase, gazeX, gazeY, gazeUnits, region,
         whereGaze
 
-    <stem>_regions.csv    one row per visit: an unbroken stretch of samples
-                          in the same region
+Visits (one row per unbroken stretch of samples in one region) are not
+saved; load_visits(gaze_path) builds them from _gaze.csv when needed:
         participantID, trialN, phase, block, attempt, blockStatus,
         trialPhase, region, start_s, end_s, duration_ms, samples
 
@@ -543,7 +544,6 @@ def merge(trials_path):
     tracker_path = trials_path.with_name(stem + ".csv")
     session_path = trials_path.with_name(stem + "_session.csv")
     gaze_path = trials_path.with_name(stem + "_gaze.csv")
-    regions_path = trials_path.with_name(stem + "_regions.csv")
 
     # Read as text so values are copied exactly as written (ID "000001").
     trials = pd.read_csv(trials_path, dtype=str, keep_default_na=False)
@@ -576,8 +576,7 @@ def merge(trials_path):
                     "blockStatus", "targetObj", "previousObj", "trialPhase",
                     "gazeX", "gazeY", "gazeUnits", "region", "whereGaze"]]
     gaze.to_csv(gaze_path, index=False, float_format="%.4f")
-    regions = visits(samples, blink_ms)
-    regions.to_csv(regions_path, index=False, float_format="%.4f")
+    regions = visits(samples, blink_ms)       # for the report only
 
     in_trials = samples["trialN"].notna()
     print(f"session:  {stem}")
@@ -626,13 +625,36 @@ def merge(trials_path):
         same = (samples.loc[both, "whereGaze"] == samples.loc[both, "region"]).mean()
         print(f"live:     whereGaze on {live.sum()} samples; same as region on "
               f"{same * 100:.1f}% of them (region not lost)")
-    print(f"written:  {gaze_path.name}, {regions_path.name}")
+    print(f"written:  {gaze_path.name}")
     return gaze_path
 
 
+def load_visits(gaze_path):
+    """The visit table of one session, built from its _gaze.csv.
+
+    Uses the blink limit saved in the session file next to it.
+    """
+    gaze_path = Path(gaze_path)
+    stem = gaze_path.name.removesuffix("_gaze.csv")
+    session = pd.read_csv(gaze_path.with_name(stem + "_session.csv"),
+                          dtype=str, keep_default_na=False).iloc[0]
+    samples = pd.read_csv(gaze_path, dtype={"participantID": str,
+                                            "phase": str, "block": str,
+                                            "attempt": str},
+                          keep_default_na=False, na_values={"psychopyTime_s": [""]})
+    samples["trialN"] = pd.to_numeric(samples["trialN"]).astype("Int64")
+    return visits(samples, float(session["DWELL_SELECTION.blinkTimeout_ms"]))
+
+
+def trial_files():
+    """Every trial file in data/: one folder per session (and older files
+    saved directly in data/)."""
+    return [*DATA_DIR.glob("*/*_trials.csv"), *DATA_DIR.glob("*_trials.csv")]
+
+
 def sessions_for(sona_id):
-    """Trial files of one participant: data/<sona_id>_<date>_<time>_trials.csv."""
-    return sorted(DATA_DIR.glob(f"{sona_id}_*_trials.csv"))
+    """Trial files of one participant."""
+    return sorted(p for p in trial_files() if p.name.startswith(f"{sona_id}_"))
 
 
 def merge_if_new(trials_path):
@@ -651,7 +673,7 @@ if __name__ == "__main__":
     # Arguments: trial file paths or SONA IDs. None: newest session in data/.
     arguments = sys.argv[1:]
     if not arguments:
-        newest = max(DATA_DIR.glob("*_trials.csv"), key=lambda p: p.stat().st_mtime)
+        newest = max(trial_files(), key=lambda p: p.stat().st_mtime)
         arguments = [str(newest)]
 
     for argument in arguments:
@@ -660,7 +682,7 @@ if __name__ == "__main__":
             continue
         found = sessions_for(argument)
         if not found:
-            known = sorted({p.name.split("_")[0] for p in DATA_DIR.glob("*_trials.csv")})
+            known = sorted({p.name.split("_")[0] for p in trial_files()})
             print(f"no sessions for SONA ID {argument}; IDs in data/: {', '.join(known)}")
         for trials_path in found:
             merge_if_new(trials_path)

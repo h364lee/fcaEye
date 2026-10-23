@@ -998,7 +998,7 @@ class Presentation:
         """Show the thank-you page, then the letter; arrows move between them.
 
         Esc leaves at once, without the pause screen: the data are already
-        saved.
+        saved. The end screen (show_end) comes next either way.
         """
         draw, n_screens = self._debrief_screen()
         screen_n = 0
@@ -1015,6 +1015,17 @@ class Presentation:
                 return
             else:
                 screen_n += 1
+
+    @_on_paper
+    def show_end(self):
+        """Last screen: "Please call the researcher." Only Esc closes it.
+
+        The participant never sees the desktop; the researcher presses Esc.
+        """
+        self.draw_page(SCREEN_TEXT["callResearcher"], 0, nav=False)
+        self.flip()
+        event.clearEvents()
+        event.waitKeys(keyList=["escape"])
 
     def park_mouse(self):
         """Hide the cursor and move it to the centre of screen 0 (Windows only).

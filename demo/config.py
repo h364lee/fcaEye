@@ -19,9 +19,9 @@ SESSION = {
 # TEST: cuts each block to this many trials (None = full block).
 # Set all to None before real data.
 DEMO_TRIALS = {
-    "practice": 2,       # per practice round
-    "learning": 4,       # per learning block
-    "test": 5,           # per test block
+    "practice": None,       # per practice round
+    "learning": None,       # per learning block
+    "test": None,           # per test block
 }
 
 # ==========================================================================
@@ -57,9 +57,9 @@ PHASES = {
     "practiceTrials": 1,           # trials per practice round
     "learnBlockTrials": 32,        # trials per learning block; must be a
                                    # multiple of the object count
-    "learnCriterion": 0.25,        # TEST value. Proportion correct needed in
+    "learnCriterion": 0.90,        # TEST value. Proportion correct needed in
                                    # a block; a timeout counts as wrong
-    "learnCriterionBlocks": 1,     # TEST value. Consecutive blocks needed at
+    "learnCriterionBlocks": 3,     # TEST value. Consecutive blocks needed at
                                    # or above learnCriterion
     "learnMaxBlocks": 10,          # if criterion not met by then, the session
                                    # ends (abandoned blocks do not count)
@@ -118,9 +118,9 @@ CALIBRATION = {
     "viewDist_mm": 850,             # eye to screen
     "screenSize_mm": [400, 300],    # width, height of the visible screen
     "targets_deg": [                # target positions (x, y) from centre
-        [-9.5,-9.5],[0,-9.5],[9.5,-9.5],
-        [-9.5,0],[0,0],[9.5,0],
-        [-9.5,9.5],[0,9.5],[9.5,9.5]
+        [-9.0,-9.0],[0,-9.0],[9.0,-9.0],
+        [-9.0,0],[0,0],[9.0,0],
+        [-9.0,9.0],[0,9.0],[9.0,9.0]
         ],
     "setupDelay_ms": 1200.0,        # wait after a target appears before
                                     # accepting a fixation
@@ -413,6 +413,8 @@ SCREEN_TEXT = {
          "Please let the researcher know that you have finished.\n\n"
          "Continue to read the debrief form on the next pages."),
     ],
+    # Last screen, after the debrief letter. Only Esc (the researcher) closes it.
+    "callResearcher": [("", "Please call the researcher.")],
     # Shown before an abandoned round starts again
     "blockRestart": [
         ("", "The round will start again from the beginning."),

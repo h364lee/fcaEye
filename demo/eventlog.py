@@ -25,16 +25,22 @@ MIN_GAP_S = 0.004
 
 
 def open_session(participant_id):
-    """Start writing tracker data to data/<id>_<YYYYmmdd_HHMMSS>.csv.
+    """Start writing tracker data to data/<name>/<name>.csv, name = <id>_<YYYYmmdd>.
 
-    Call before StartTracking() (the order CRS's demos use). Returns the path.
+    Each session gets its own folder; the session and trial files go next
+    to the tracker file. A second session with the same ID on the same day
+    gets _2 (then _3 ...), so nothing is overwritten. Call before
+    StartTracking() (the order CRS's demos use). Returns the path.
     """
     global _open
     data_dir = PATHS['dataDir']
-    data_dir.mkdir(parents=True, exist_ok=True)
-
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = data_dir / f"{participant_id}_{stamp}.csv"
+    stem = f"{participant_id}_{datetime.now().strftime('%Y%m%d')}"
+    name, n = stem, 1
+    while (data_dir / name).exists():
+        n += 1
+        name = f"{stem}_{n}"
+    (data_dir / name).mkdir(parents=True)
+    path = data_dir / name / f"{name}.csv"
 
     if LiveTrack.SetDataFilename(str(path)) != 0:
         raise RuntimeError(f"LiveTrack could not open {path}")

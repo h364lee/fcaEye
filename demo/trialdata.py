@@ -1,9 +1,10 @@
 """Session and trial data files.
 
-    data/<id>_<date>_<time>.csv           tracker samples and markers
+    data/<name>/<name>.csv                tracker samples and markers
                                           (LiveTrack, eventlog.py)
-    data/<id>_<date>_<time>_session.csv   one row of session-wide values
-    data/<id>_<date>_<time>_trials.csv    one row per trial
+    data/<name>/<name>_session.csv        one row of session-wide values
+    data/<name>/<name>_trials.csv         one row per trial
+name = <id>_<date> (YYYYmmdd; a second session that day adds _2, _3 ...)
 
 Join on participantID. The session file is written after recording starts.
 Each trial row is saved when its trial ends, so a crash loses at most the
@@ -118,21 +119,36 @@ def trial_column_names():
     return names
 
 
+# Post-task answers: columns of the session file, empty until answered.
+POSTTASK_COLUMNS = ["q1Pattern", "q2Strategy", "q3Features", "q4Difficulty"]
+
+_session_path = None
+_session_row = None
+
+
+def _write_session():
+    with open(_session_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(_session_row))
+        writer.writeheader()
+        writer.writerow(_session_row)     # None is written as an empty cell
+
+
 def open_files(tracker_path, participant_id, session):
     """Write the session file and open the trial file next to the tracker
     file. Returns (session_path, trials_path).
 
-    Session file columns: participantID, session, then "GROUP.key" settings.
+    Session file columns: participantID, session, the post-task answers
+    (empty until update_session), then "GROUP.key" settings.
     """
-    global _file, _writer, _participant_id
+    global _file, _writer, _participant_id, _session_path, _session_row
     _participant_id = participant_id
 
-    session_path = tracker_path.with_name(tracker_path.stem + "_session.csv")
-    row = {"participantID": participant_id, **session, **settings_columns()}
-    with open(session_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(row))
-        writer.writeheader()
-        writer.writerow(row)
+    _session_path = tracker_path.with_name(tracker_path.stem + "_session.csv")
+    _session_row = {"participantID": participant_id, **session,
+                    **{column: None for column in POSTTASK_COLUMNS},
+                    **settings_columns()}
+    _write_session()
+    session_path = _session_path
 
     trials_path = tracker_path.with_name(tracker_path.stem + "_trials.csv")
     _file = open(trials_path, "w", newline="", encoding="utf-8")
@@ -143,6 +159,20 @@ def open_files(tracker_path, participant_id, session):
     _writer.writeheader()
     _file.flush()
     return session_path, trials_path
+
+
+def update_session(values):
+    """Fill in session-file columns (e.g. the post-task answers); return its path.
+
+    The file is written again whole: it is one row, so this is quick, and
+    the file is complete at every moment.
+    """
+    unknown = set(values) - set(_session_row)
+    if unknown:
+        raise KeyError(f"not session-file columns: {sorted(unknown)}")
+    _session_row.update(values)
+    _write_session()
+    return _session_path
 
 
 def write_row(trial):
