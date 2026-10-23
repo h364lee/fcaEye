@@ -15,7 +15,7 @@ Outputs, next to the inputs:
     <stem>_gaze.csv       one row per tracker sample (every 2 ms)
         participantID, Timestamp, psychopyTime_s,
         trialN, trialRecorded, phase, block, attempt, targetObj, previousObj,
-        trialPhase, gazeX, gazeY, region
+        trialPhase, gazeX, gazeY, region, whereGaze
 
     <stem>_regions.csv    one row per visit: an unbroken stretch of samples
                           in the same region
@@ -28,7 +28,10 @@ Terms
              the next sample ("event=dot_on trial=3 ...")
     trial window   the samples of one trial (see assign_trials)
     region   g0..g7 (on a name), centre, other, or lost (no gaze from
-             either eye)
+             either eye); computed here from each 2-ms sample
+    whereGaze  the live state the experiment recorded during the trial
+             (10-ms intervals, blinks filled; see response.GazeStateRecorder);
+             empty outside dot_on to feedback (or blank)
     visit    consecutive samples in one region; a short loss of gaze
              (a blink) with the same region on both sides does not end it
 
@@ -43,19 +46,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_DIR / "data"
 
-# Marker name -> trial-file column holding the PsychoPy time of that event.
-EVENT_TIMES = {
-    "dot_on": "dotOn_s",
-    "fixation_held": "fixationHeld_s",
-    "names_on": "namesOn_s",
-    "object_on": "objectOn_s",
-    "selection": "response_s",
-    "timeout": "response_s",
-    "feedback_on": "feedbackOn_s",
-    "blank_on": "blankOn_s",
-}
+# Marker name -> trial-file column of that event's PsychoPy time. Taken from
+# the experiment's own trialdata.py, so the two can never disagree.
+sys.path.insert(0, str(PROJECT_DIR / "demo"))
+from trialdata import EVENT_TIMES, tracker_column  # noqa: E402
 
 # Markers that close an open trial window. Before blank_on, this means
 # the trial was interrupted.
@@ -169,14 +166,14 @@ def assign_trials(samples, markers, trials, iti_s):
             previous_target = fields.get("target")
         elif event == "blank_on" and open_trial is not None:
             open_trial[2] = time_us[index] + iti_us + END_GRACE_S * 1e6
-        if "trial" in fields:
+        if event in EVENT_TIMES:
             trial_phase[index] = event
     close(n)
 
     # Latest trial marker, carried forward, but only inside its own window.
     marker_trial = np.full(n, -1)
     for index, event, fields in markers:
-        if "trial" in fields:
+        if event in EVENT_TIMES:
             marker_trial[index] = int(fields["trial"])
     phase_series = pd.Series(trial_phase).replace("", np.nan).ffill()
     owner = pd.Series(np.where(marker_trial >= 0, marker_trial, np.nan)).ffill()
@@ -323,6 +320,38 @@ def visits(samples, blink_ms):
     return out
 
 
+def where_gaze(samples, markers):
+    """whereGaze for every sample, from the experiment's gaze markers.
+
+    Each marker lists changes as state:tracker_us. A state holds from its
+    time until the next change of the same trial; "off" ends it. Only
+    samples in that trial's window get a value.
+    """
+    changes = {}
+    for _, event, fields in markers:
+        if event != "gaze":
+            continue
+        for part in fields["states"].split(";"):
+            state, us = part.split(":")
+            changes.setdefault(int(fields["trial"]), []).append((int(us), state))
+
+    time_us = samples["Timestamp"].to_numpy()
+    trial_n = samples["trialN"].to_numpy(dtype=float, na_value=np.nan)
+    out = np.full(len(samples), "", dtype=object)
+    for trial, items in changes.items():
+        items.sort()
+        where = np.where(trial_n == trial)[0]
+        if not len(where):
+            continue
+        starts = np.array([us for us, _ in items])
+        states = np.array([st for _, st in items] + [""], dtype=object)
+        k = np.searchsorted(starts, time_us[where], side="right") - 1
+        values = states[np.where(k >= 0, k, -1)]     # before the first: ""
+        values[values == "off"] = ""
+        out[where] = values
+    return out
+
+
 # ---------------------------------------------------------------- clocks
 
 def event_pairs(samples, markers, trials, column_for):
@@ -358,8 +387,7 @@ def fit_clock(samples, markers, trials):
 
 def check_lag(samples, markers, trials):
     """How far GetLastResult's timestamp trails the marker, per event (ms)."""
-    pairs = event_pairs(samples, markers, trials,
-                        lambda c: c.removesuffix("_s") + "Tracker_us")
+    pairs = event_pairs(samples, markers, trials, tracker_column)
     return (pairs[:, 0] - pairs[:, 1]) / 1000
 
 
@@ -394,11 +422,13 @@ def merge(trials_path):
     samples["psychopyTime_s"] = offset + rate * samples["Timestamp"] / 1e6
     samples["gazeX"], samples["gazeY"] = gaze_point(samples)
     samples["region"] = assign_regions(samples, trials, name_radius_px, centre_radius_px)
+    samples["whereGaze"] = where_gaze(samples, markers)
     samples["participantID"] = participant
 
     gaze = samples[["participantID", "Timestamp", "psychopyTime_s", "trialN",
                     "trialRecorded", "phase", "block", "attempt", "targetObj",
-                    "previousObj", "trialPhase", "gazeX", "gazeY", "region"]]
+                    "previousObj", "trialPhase", "gazeX", "gazeY", "region",
+                    "whereGaze"]]
     gaze.to_csv(gaze_path, index=False, float_format="%.4f")
     regions = visits(samples, blink_ms)
     regions.to_csv(regions_path, index=False, float_format="%.4f")
@@ -431,6 +461,12 @@ def merge(trials_path):
     if total:
         print(f"check:    gaze on the selected name at {hits} of {total} selection markers")
     print(f"visits:   {len(regions)}  (blinks up to {blink_ms:.0f} ms bridged)")
+    live = samples["whereGaze"] != ""
+    if live.any():
+        both = live & (samples["region"] != "lost")
+        same = (samples.loc[both, "whereGaze"] == samples.loc[both, "region"]).mean()
+        print(f"live:     whereGaze on {live.sum()} samples; same as region on "
+              f"{same * 100:.1f}% of them (region not lost)")
     print(f"written:  {gaze_path.name}, {regions_path.name}")
     return gaze_path
 

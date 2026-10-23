@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from config import (ATTRIBUTES, COUNTERBALANCE, DEMO_TRIALS, EULER_TOUR,
                     GEOMETRY, GROUP_CELLS, IMAGE_NAME_ORDER, NAMES, NAMES_B,
-                    OBJECT_SETS, ORDER, PATHS, PHASES, PRACTICE_NAMES,
+                    OBJECT_SETS, ORDER, PHASES, PRACTICE_NAMES,
                     PRACTICE_OBJECTS,
                     PROJECT_DIR)
 from config import CONTEXT, CONTEXTS
@@ -135,11 +135,6 @@ def trial_sequence(seed, objects=None):
 
     # euler.py labels are "0", "1", ...: positions in objects
     return [objects[int(label)] for label in labels]
-
-
-def image_code(obj):
-    """CONTEXT row as text, e.g. "1 1 0"; spaces keep a leading 0 on read-back."""
-    return " ".join(str(value) for value in CONTEXT[obj])
 
 
 def attributes_text(attributes=ATTRIBUTES):

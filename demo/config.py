@@ -107,6 +107,12 @@ DWELL_SELECTION = {
                                 # longer resets it
 }
 
+# Live gaze state (whereGaze column of <stem>_gaze.csv): g0-g7, centre, other
+# or lost, recorded during trials from dot_on to feedback (or blank).
+GAZE_STATE = {
+    "interval_ms": 10,          # one state per interval of tracker time
+}
+
 # Calibration (values match CRS LiveTrack calibrate.py)
 CALIBRATION = {
     "viewDist_mm": 850,             # eye to screen
@@ -148,7 +154,6 @@ GEOMETRY = {
     "centralDotRadius_px": 5,        # fixation dot radius
     "nameSelectMargin_deg": 1.0,     # selection circle radius = widest name's
                                      # centre-to-corner distance + this
-    "feedbackWrongMark": "x",        # mark on a wrong choice: "x" or "o"
     "feedbackNameOffset_px": 70,     # name centre to object centre in feedback
                                      # (object below the name, or above where
                                      # it would not fit)
@@ -285,7 +290,7 @@ ORDER = {
 # ==========================================================================
 
 SCREEN_TEXT = {
-    # Screen 1
+    # Order below follows the session.
     "greeting": [
         ("Welcome",
          "Welcome and thank you for taking part in this study.\n\n"
@@ -300,13 +305,13 @@ SCREEN_TEXT = {
          "researcher know.\n\n"
          "We will ask you a few demographic questions first."),
     ],
-    # Screen 2: (question, hint under the box)
+    # Demographic questions: (question, hint under the box)
     "sonaId": ("What is your SONA ID?", "6 digits"),
     "age": ("What is your age?",
             "You may skip this question: press Enter without typing"),
     "gender": "What is your gender?",
     "selfDescribe": "Please describe your gender",
-    # Screen 5 (before calibration). Optional third part: small trial
+    # Instructions. Optional third part: small trial
     # pictures as (picture, caption). Pictures: "dot", "names", "cue",
     # "correct", "incorrect". They use practice objects and names.
     "task": [
@@ -335,7 +340,6 @@ SCREEN_TEXT = {
          "Before the task starts, you will go through calibration of the "
          "eye tracker."),
     ],
-    # Screen 3
     "calibration": [
         ("Calibration",
          "You will go through the calibration process to adjust the "
@@ -344,7 +348,7 @@ SCREEN_TEXT = {
          "directly at each dot until it disappears.\n\n"
          "Please keep your head still on the chin rest."),
     ],
-    # Screen 4: both eyes passed. A page with title "" shows its text
+    # Both eyes passed. A page with title "" shows its text
     # in the middle of the screen.
     "calibrationDone": [("", "Calibration was successful.")],
     # After a failed attempt; calibration then runs again
@@ -364,7 +368,7 @@ SCREEN_TEXT = {
         ("", "Press Space to practise again.\n\n"
              "Press \u2192 to move on to the task."),
     ],
-    # Screens 6-8: before learning 1, after the practice
+    # Before learning 1, after the practice
     "learning": [
         ("Learning",
          "Now you are moving on to the real task.\n\n"
@@ -403,7 +407,7 @@ SCREEN_TEXT = {
         ("", "You have finished the task.\n\n"
              "We will ask a few optional questions about your experience."),
     ],
-    # Screen 13. Screens 9-12 are POSTTASK; screen 14 is the debrief letter.
+    # After the post-task questions (POSTTASK); the debrief letter follows.
     "thankYou": [
         ("Thank you for your participation!",
          "Please let the researcher know that you have finished.\n\n"
@@ -470,10 +474,14 @@ POSTTASK = {
 PAGE_STYLE = {
     "titleFont": "Source Sans 3",   # titles in semibold
     "bodyFont": "Source Sans 3",
-    "sheetSize": (780, 660),        # text area
+    "sheetHeight": 660,             # text area height
     "columnWidth": 640,             # text width; about 60 characters a line
     "titleHeight": 34,              # title letter height
     "bodyHeight": 23,               # body letter height
+    "letterHeadingHeight": 23,      # debrief letter: heading letter height
+    "letterBodyHeight": 19,         # debrief letter: body letter height
+                                    # (smaller, so the long letter needs
+                                    # fewer pages)
     "lineSpacing": 1.12,            # TextBox2 units: 1 = the font's own spacing
     "paper": "#FFFFFF",             # background of text screens
     "ink": "#000000",               # titles, "Next"

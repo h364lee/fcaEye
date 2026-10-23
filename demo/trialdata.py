@@ -21,7 +21,8 @@ from config import NAMES, OBJECT_SETS
 # Config groups copied to the session file as "GROUP.key" columns.
 SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "ORDER", "EULER_TOUR", "PHASES",
             "COUNTERBALANCE", "DEMO_TRIALS",
-            "DWELL_SELECTION", "CENTRAL_FIXATION", "CALIBRATION"]
+            "DWELL_SELECTION", "CENTRAL_FIXATION", "GAZE_STATE",
+            "CALIBRATION"]
 
 # Marker name -> column holding the PsychoPy time (s) the marker was written.
 EVENT_TIMES = {

@@ -13,7 +13,7 @@ from datetime import datetime
 sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
 import LiveTrack
 
-from psychopy import core, event
+from psychopy import core
 
 import calibrate
 import design
@@ -96,6 +96,9 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
         times[trialdata.tracker_column(column)] = eventlog.tracker_time_us()
         eventlog.mark(event, trial=trial_n, **fields)
 
+    def tracker_us(event):
+        return times[trialdata.tracker_column(trialdata.EVENT_TIMES[event])]
+
     rotation = geometry.ring_rotation()
     positions = geometry.ring_positions(rotation)
 
@@ -104,6 +107,9 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
     pres.flip()
     mark("dot_on", target=target, name=pres.stim_set.names[target],
          rotation_deg=f"{rotation:.2f}")
+    # Live gaze state (whereGaze), from the dot until feedback or blank
+    response.STATES.start(trial_n, positions, pres.ring_order,
+                          pres.name_radius_px, tracker_us("dot_on"))
     response.wait_for_central_fixation(pres, CENTRAL_FIXATION['centralHold_ms'] / 1000)
     mark("fixation_held")
 
@@ -113,6 +119,7 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
     pres.draw_fixation()
     pres.flip()
     mark("names_on")
+    response.STATES.show_names(tracker_us("names_on"))
     preview_s = random.uniform(*TIMING['previewDurRange'])
     response.wait_for_central_fixation(pres, preview_s, positions)
 
@@ -148,11 +155,13 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
         pres.draw_feedback(target, selection, positions)
         pres.flip()
         mark("feedback_on")
+        response.STATES.stop(tracker_us("feedback_on"))
         core.wait(TIMING['feedbackDur'])
 
     # --- 5. blank interval ------------------------------------------------
     pres.flip()
     mark("blank_on")
+    response.STATES.stop(tracker_us("blank_on"))   # test blocks (no feedback)
     core.wait(TIMING['iti'])
 
     if outcome is None:
@@ -289,11 +298,10 @@ def run_practice(pres, session, stim_set):
 
 
 def run_learning(pres, session, phase, stim_set):
-    """Learning blocks until the criterion is met; return the blocks run.
+    """Learning blocks until the criterion is met.
 
     An abandoned block resets the consecutive count to 0. If the criterion
     is not met in PHASES["learnMaxBlocks"] blocks, raises EndSession.
-    Returns None if skipped from the pause screen.
     """
     try:
         in_a_row = 0
@@ -330,7 +338,7 @@ def run_learning(pres, session, phase, stim_set):
 
             if met:
                 eventlog.mark("criterion_met", phase=phase, blocks=block_n)
-                return block_n
+                return
 
         eventlog.mark("criterion_not_met", phase=phase,
                       blocks=PHASES["learnMaxBlocks"])
@@ -339,7 +347,6 @@ def run_learning(pres, session, phase, stim_set):
     except SkipSection:
         eventlog.mark("section_skipped", phase=phase)
         print(f"{phase} skipped by the researcher.")
-        return None
 
 
 def run_test(pres, session, phase, stim_set):
@@ -355,25 +362,31 @@ def run_test(pres, session, phase, stim_set):
         print(f"{phase} skipped by the researcher.")
 
 
+def calibration_fields(accuracy):
+    """Calibration error per eye as marker fields, e.g. cal_left_deg=0.130."""
+    return {f"cal_{eye}_deg": f"{entry['accuracy_deg']:.3f}"
+            for eye, entry in accuracy.items()}
+
+
 def run_calibration(pres):
     """Calibrate until both eyes pass (no attempt limit).
 
     Assumes the tracker is set to raw results and is tracking.
     Returns (accuracy, attempts).
     """
-    pres.show_pages(SCREEN_TEXT["calibration"])       # Screen 3
+    pres.show_pages(SCREEN_TEXT["calibration"])
     attempts = 0
     while True:
         attempts += 1
         pres.park_mouse()
         accuracy = calibrate.gaze_calibration(pres.win)
-        if calibrate.report_calibration(pres, accuracy, attempts):
+        if calibrate.report_calibration(accuracy, attempts):
             print(f"PASSED on attempt {attempts}.")
-            pres.show_pages(SCREEN_TEXT["calibrationDone"])   # Screen 4
+            pres.show_pages(SCREEN_TEXT["calibrationDone"])
             return accuracy, attempts
         print(f"FAILED (attempt {attempts}); running it again. Adjust the "
               "camera or the participant if needed (Esc: pause screen).")
-        pres.show_pages(SCREEN_TEXT["calibrationFailed"])     # Screen 4b
+        pres.show_pages(SCREEN_TEXT["calibrationFailed"])
 
 
 def recalibrate(pres):
@@ -398,14 +411,8 @@ def recalibrate(pres):
     LiveTrack.ClearDataBuffer()
     LiveTrack.StartTracking()
     core.wait(0.5)        # past the tracker's clock reset, as at the start
-    calibration = {f"cal_{eye}_deg": f"{entry['accuracy_deg']:.3f}"
-                   for eye, entry in accuracy.items()}
-    eventlog.mark("recalibration_end", attempts=attempts, **calibration)
-
-
-def show_ending(pres):
-    """Show the thank-you page and debrief letter (Screens 13-14)."""
-    pres.show_debrief()
+    eventlog.mark("recalibration_end", attempts=attempts,
+                  **calibration_fields(accuracy))
 
 
 def main():
@@ -446,12 +453,12 @@ def main():
     participant = {"sonaID": "debug", "age": "", "gender": ""}
     try:
         # Inside the try, so Esc here still closes the window and tracker.
-        pres.show_pages(SCREEN_TEXT["greeting"])          # Screen 1
+        pres.show_pages(SCREEN_TEXT["greeting"])
         if SESSION["yesDemographics"]:
-            participant = ask_demographics(pres)            # Screen 2
+            participant = ask_demographics(pres)
         pid = participant["sonaID"]
 
-        pres.show_pages(SCREEN_TEXT["task"])               # Screen 5
+        pres.show_pages(SCREEN_TEXT["task"])
 
         pres.park_mouse()
 
@@ -489,16 +496,15 @@ def main():
         session = Session()
 
         # One marker only: markers sent close together can merge into one.
-        calibration = {f"cal_{eye}_deg": f"{entry['accuracy_deg']:.3f}"
-                       for eye, entry in accuracy.items()}
-        eventlog.mark("session_start", participant=pid, **calibration)
+        eventlog.mark("session_start", participant=pid,
+                      **calibration_fields(accuracy))
 
         pres.show_pages(SCREEN_TEXT["practice"])
         run_practice(pres, session, practice_set)
 
-        pres.show_pages(SCREEN_TEXT["learning"])           # Screen 6
+        pres.show_pages(SCREEN_TEXT["learning"])
         run_learning(pres, session, "learning1", phase1_set)
-        pres.show_pages(SCREEN_TEXT["test"])               # Screen 8
+        pres.show_pages(SCREEN_TEXT["test"])
         run_test(pres, session, "test1", phase1_set)
 
         # Learning 2 and test 2 are off for now. To add them back:
@@ -511,13 +517,13 @@ def main():
         pres.show_pages(SCREEN_TEXT["taskEnd"])
         posttask_q(pres, path)
         eventlog.mark("session_end")
-        show_ending(pres)
+        pres.show_debrief()
     except EndSession as e:
         # Data so far are on disk; the participant still gets the debrief.
         set_trials_running(False)
         eventlog.mark("session_ended_early")    # no-op before recording
         print(f"\nENDED EARLY: {e}")
-        show_ending(pres)
+        pres.show_debrief()
     except response.FixationTimeout as e:
         eventlog.mark("session_aborted", reason="fixation_timeout")
         print(f"\nABORTED: {e}")

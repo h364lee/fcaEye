@@ -16,14 +16,16 @@ _mouse = None
 
 
 class _Sample:
-    """Fake sample with the fields the project reads."""
+    """Fake sample with the fields the project reads (both eyes = mouse)."""
 
-    def __init__(self, x, y):
-        self.Tracked = True
-        self.GazeX = x
-        self.GazeY = y
+    def __init__(self, x, y, timestamp=None):
+        self.Tracked = self.TrackedRight = True
+        self.GazeX = self.GazeXRight = x
+        self.GazeY = self.GazeYRight = y
         # microseconds, like the tracker clock
-        self.Timestamp = int((time.perf_counter() - _start) * 1e6)
+        if timestamp is None:
+            timestamp = int((time.perf_counter() - _start) * 1e6)
+        self.Timestamp = timestamp
 
 
 def _mouse_sample():
@@ -49,7 +51,23 @@ for name in ("Init", "Close", "StartTracking", "StopTracking",
 fake.GetCaptureConfig = lambda: (0, 0, 500, 0, 0)   # [2] = sample rate
 fake.GetTracking = lambda: (True, True)             # (left, right)
 fake.GetLastResult = _mouse_sample
-fake.GetBufferedEyePositions = lambda *args: [_mouse_sample()]
+_last_us = None
+
+
+def _buffered(*args):
+    """Every 2-ms sample since the last read, like the real buffer."""
+    global _last_us
+    now = _mouse_sample()
+    if _last_us is None or now.Timestamp - _last_us > 2_000_000:
+        _last_us = now.Timestamp - 2000      # keep at most about 2 s
+    samples = []
+    while _last_us + 2000 <= now.Timestamp:
+        _last_us += 2000
+        samples.append(_Sample(now.GazeX, now.GazeY, _last_us))
+    return samples
+
+
+fake.GetBufferedEyePositions = _buffered
 
 
 def _set_data_filename(path):

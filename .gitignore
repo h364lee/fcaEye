@@ -7,7 +7,10 @@ __pycache__/
 # Collected data stays out of version control
 data/
 
+# Generated images (lattice.py output, old mockups)
+out/
+
 # macOS
 .DS_Store
 
-Claude outputs/
+Claude outputs/

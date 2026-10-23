@@ -30,7 +30,6 @@ INK = _rgb(PAGE_STYLE["ink"])
 DIM_TEXT = _rgb(PAGE_STYLE["muted"])
 BOX_FILL = _rgb(PAGE_STYLE["box"])          # typing boxes, options
 BOX_LINE = _rgb(PAGE_STYLE["boxLine"])
-OPTION_FILL = BOX_FILL
 CHOSEN_FILL = _rgb(PAGE_STYLE["chosen"])
 CHOSEN_LINE = _rgb(PAGE_STYLE["accent"])
 
@@ -177,10 +176,6 @@ class Presentation:
             lineColor="white",
         )
 
-        self.message = visual.TextStim(
-            self.win, text="", height=24, color="white", wrapWidth=850
-        )
-
         # Feedback: green circle around the correct name and its object.
         self.pair_circle = visual.Circle(
             self.win,
@@ -190,17 +185,8 @@ class Presentation:
             lineWidth=5,
         )
 
-        # Red circle around a wrong name (feedbackWrongMark "o").
-        self.wrong_circle = visual.Circle(
-            self.win,
-            radius=geometry.pair_circle_radius(),
-            fillColor=None,
-            lineColor="red",
-            lineWidth=5,
-        )
-
-        # Red X over a wrong name ("x"). Its ends touch a circle the size of
-        # the green circle, so the marks match in size.
+        # Red X over a wrong name. Its ends touch a circle the size of the
+        # green circle, so the marks match in size.
         arm = geometry.pair_circle_radius() / 2 ** 0.5
         self.wrong_mark = [
             visual.Line(self.win, start=(-arm, -arm), end=(arm, arm),
@@ -208,10 +194,6 @@ class Presentation:
             visual.Line(self.win, start=(-arm, arm), end=(arm, -arm),
                         lineColor="red", lineWidth=5),
         ]
-
-        if GEOMETRY['feedbackWrongMark'] not in ("x", "o"):
-            raise ValueError("GEOMETRY['feedbackWrongMark'] must be \"x\" or "
-                             f"\"o\"; it is {GEOMETRY['feedbackWrongMark']!r}")
 
         # Build every set once so all names can be measured; start on phase1.
         self._built_sets = {}
@@ -328,13 +310,9 @@ class Presentation:
             selected_pos = positions[self.ring_order.index(selection)]
             self.name_texts[selection].pos = selected_pos
             self.name_texts[selection].draw()
-            if GEOMETRY['feedbackWrongMark'] == "x":
-                for line in self.wrong_mark:
-                    line.pos = selected_pos
-                    line.draw()
-            else:
-                self.wrong_circle.pos = selected_pos
-                self.wrong_circle.draw()
+            for line in self.wrong_mark:
+                line.pos = selected_pos
+                line.draw()
 
     def set_background(self, hex_colour):
         """Change the window background to a "#RRGGBB" colour."""
@@ -356,7 +334,7 @@ class Presentation:
         # Register the bundled fonts so TextBox2 finds them by family name.
         _tb2.allFonts.addFontFiles(FONT_FILES)
 
-        w, h = st["sheetSize"]
+        h = st["sheetHeight"]
         top, bottom = h / 2, -h / 2
         left, right = -st["columnWidth"] / 2, st["columnWidth"] / 2
         self._col = (left, right, top, bottom)
@@ -377,9 +355,8 @@ class Presentation:
                                          lineSpacing=st["lineSpacing"])
         footer_y = bottom + 44
         self._footer_y = footer_y
-        # Top of the footer area (nothing is drawn here). Notes and pictures
-        # go above it.
-        self._hairline_y = bottom + 74
+        # Top of the footer area. Notes, pictures and letter text stay above it.
+        self._footer_top = bottom + 74
         self._page_back = self._text(st["bodyFont"], 18, st["muted"],
                                      (left, footer_y), (200, 30),
                                      anchor="left", text=NAV_TEXT["back"])
@@ -388,7 +365,7 @@ class Presentation:
                                      anchor="right", bold=True)
         # Small grey note just above the footer.
         self._page_note = self._text(st["bodyFont"], 18, st["muted"],
-                                     (left, self._hairline_y + 18),
+                                     (left, self._footer_top + 18),
                                      (right - left, 60), anchor="bottom-left",
                                      lineSpacing=st["lineSpacing"])
         self._pictures = {}             # scale -> picture stimuli
@@ -420,8 +397,6 @@ class Presentation:
         r = geometry.pair_circle_radius() * s
         pic["pair"] = visual.Circle(self.win, radius=r, fillColor=None,
                                     lineColor="lime", lineWidth=2)
-        pic["wrong_o"] = [visual.Circle(self.win, radius=r, fillColor=None,
-                                        lineColor="red", lineWidth=2)]
         arm = r / 2 ** 0.5
         pic["wrong_x"] = [
             visual.Line(self.win, start=(-arm, -arm), end=(arm, arm),
@@ -473,9 +448,7 @@ class Presentation:
             wrong_pos = at(full[order.index(wrong)])
             pic["names"][wrong].pos = wrong_pos
             pic["names"][wrong].draw()
-            marks = (pic["wrong_x"] if GEOMETRY['feedbackWrongMark'] == "x"
-                     else pic["wrong_o"])
-            for mark in marks:
+            for mark in pic["wrong_x"]:
                 mark.pos = wrong_pos
                 mark.draw()
 
@@ -492,7 +465,7 @@ class Presentation:
         s = min(PAGE_STYLE["pictureScale"], fit)
         w, h = screen_w * s, screen_h * s
         captions = any(caption for _, caption in pictures)
-        base = self._hairline_y + 24 + (28 if captions else 0)
+        base = self._footer_top + 24 + (28 if captions else 0)
         y = base + h / 2
         for i, (kind, caption) in enumerate(pictures):
             x = (i - (n - 1) / 2) * (w + gap)
@@ -545,11 +518,11 @@ class Presentation:
         self._page_next.draw()
 
     @_on_paper
-    def show_pages(self, pages, fill=None, escape_exits=False):
+    def show_pages(self, pages, fill=None):
         """Show text pages; right arrow = next, left arrow = back.
 
         Returns after the right arrow on the last page. Esc opens the pause
-        screen, or returns if escape_exits is True.
+        screen.
         """
         index = 0
         event.clearEvents()
@@ -563,8 +536,6 @@ class Presentation:
                 index += 1
             elif key == "left":
                 index = max(0, index - 1)
-            elif escape_exits:
-                return
             else:
                 pause_menu()
 
@@ -632,9 +603,13 @@ class Presentation:
 
     def _label(self, text, y, height, color=INK, bold=False, x=0,
                align="center"):
-        """Return a text line for the question screens."""
+        """Return a text line for the question screens.
+
+        bold picks the Semibold file. TextStim's own bold=True is not used:
+        it looks for a "Bold" face and falls back to another font.
+        """
         return visual.TextStim(self.win, text=text, pos=(x, y), height=height,
-                               color=color, bold=bold, wrapWidth=900,
+                               color=color, wrapWidth=900,
                                font=PAGE_STYLE["bodyFont"],
                                fontFiles=FONT_BODY_BOLD if bold else FONT_BODY,
                                anchorHoriz=align, alignText=align)
@@ -642,7 +617,7 @@ class Presentation:
     def _title(self, text, y):
         """Return the question line, in semibold like page titles."""
         return visual.TextStim(self.win, text=text, pos=(0, y), height=32,
-                               color=INK, bold=True, wrapWidth=900,
+                               color=INK, wrapWidth=900,
                                font=PAGE_STYLE["titleFont"],
                                fontFiles=FONT_BODY_BOLD)
 
@@ -746,7 +721,7 @@ class Presentation:
         for i, option in enumerate(options):
             y = 87 - 70 * i
             boxes.append(visual.Rect(self.win, width=460, height=55, pos=(0, y),
-                                     fillColor=OPTION_FILL, lineColor=BOX_LINE,
+                                     fillColor=BOX_FILL, lineColor=BOX_LINE,
                                      lineWidth=1))
             labels.append(self._label(str(i + 1), y, 22, DIM_TEXT, bold=True,
                                       x=-205, align="left"))
@@ -754,7 +729,7 @@ class Presentation:
 
         def draw(chosen=None):
             for i, box in enumerate(boxes):
-                box.fillColor = CHOSEN_FILL if i == chosen else OPTION_FILL
+                box.fillColor = CHOSEN_FILL if i == chosen else BOX_FILL
                 box.lineColor = CHOSEN_LINE if i == chosen else BOX_LINE
                 box.lineWidth = 3 if i == chosen else 1
                 box.draw()
@@ -920,7 +895,7 @@ class Presentation:
         def draw(rating):
             for i, box in enumerate(boxes):
                 on = rating == i + 1
-                box.fillColor = CHOSEN_FILL if on else OPTION_FILL
+                box.fillColor = CHOSEN_FILL if on else BOX_FILL
                 box.lineColor = CHOSEN_LINE if on else BOX_LINE
                 box.lineWidth = 3 if on else 1
                 box.draw()
@@ -929,16 +904,8 @@ class Presentation:
         return draw
 
     # --- end of session ---
-    # The debrief letter is drawn as a light grey sheet on the white screen.
-
-    LETTER_FONT = "Times New Roman"  # installed on macOS and Windows
-    SHEET_SIZE = (800, 720)         # width, height, px
-    SHEET_MARGIN = 50               # sheet edge to text, px
-    LETTER_STYLES = {               # kind: (letter height px, bold, alignment)
-        "title": (24, True, "center"),
-        "heading": (20, True, "left"),
-        "body": (16, False, "left"),
-    }
+    # The debrief letter uses the page layout: semibold title and headings,
+    # body text in the text column, the Back/Next footer, and "Page X of Y".
 
     def _letter_paragraphs(self):
         """Read the letter file; return [(kind, text), ...].
@@ -961,73 +928,69 @@ class Presentation:
                 paragraphs.append(("body", block))
         return paragraphs
 
-    def _text_height(self, stim, height):
-        """Return a wrapped TextStim's height in px.
-
-        Estimated from the character count if this PsychoPy version has no
-        boundingBox.
-        """
-        try:
-            return stim.boundingBox[1]
-        except (AttributeError, TypeError):
-            chars_per_line = stim.wrapWidth / (0.5 * height)
-            lines = sum(max(1, -(-len(line) // int(chars_per_line)))
-                        for line in stim.text.split("\n"))
-            return lines * height * 1.25
+    def _letter_stim(self, kind, text):
+        """One letter paragraph as a TextStim, anchored at its top-left corner."""
+        st = PAGE_STYLE
+        left, right, _, _ = self._col
+        size, bold, colour = {          # kind: (letter height, semibold, colour)
+            "title": (st["titleHeight"], True, INK),
+            "heading": (st["letterHeadingHeight"], True, INK),
+            "body": (st["letterBodyHeight"], False, _rgb(st["body"])),
+        }[kind]
+        # Semibold through its file, not bold=True (see _label)
+        stim = visual.TextStim(self.win, text=text, height=size, color=colour,
+                               wrapWidth=right - left, font=st["bodyFont"],
+                               fontFiles=FONT_BODY_BOLD if bold else FONT_BODY,
+                               anchorHoriz="left", anchorVert="top",
+                               alignText="left", pos=(left, 0))
+        stim.gap = 0.9 * size           # space after the paragraph
+        return stim
 
     def _debrief_pages(self):
-        """Lay the letter out on sheets; return a list of TextStim lists.
+        """Lay the letter out in the text column; return a list of TextStim lists.
 
-        A paragraph that does not fit starts a new sheet.
+        A paragraph that does not fit starts a new page; a heading moves
+        with the paragraph after it.
         """
-        w, h = self.SHEET_SIZE
-        text_w = w - 2 * self.SHEET_MARGIN
-        top = h / 2 - self.SHEET_MARGIN + 10          # sheet centre is y = 10
-        bottom = -h / 2 + self.SHEET_MARGIN + 30      # leaves room for the page number
-        pages, y = [[]], top
-        for kind, text in self._letter_paragraphs():
-            size, bold, align = self.LETTER_STYLES[kind]
-            x = 0 if align == "center" else -text_w / 2
-            stim = visual.TextStim(self.win, text=text, height=size, bold=bold,
-                                   font=self.LETTER_FONT,
-                                   color="black", wrapWidth=text_w,
-                                   anchorHoriz=align, anchorVert="top",
-                                   alignText=align, pos=(x, y))
-            needed = self._text_height(stim, size)
-            if y - needed < bottom and pages[-1]:
+        left, _, top, _ = self._col
+        first_y = top - 84              # where page titles start
+        last_y = self._footer_top + 10
+        stims = [self._letter_stim(kind, text)
+                 for kind, text in self._letter_paragraphs()]
+        kinds = [kind for kind, _ in self._letter_paragraphs()]
+        pages, y = [[]], first_y
+        for i, stim in enumerate(stims):
+            needed = stim.boundingBox[1]
+            if kinds[i] == "heading" and i + 1 < len(stims):
+                needed += stim.gap + stims[i + 1].boundingBox[1]
+            if y - needed < last_y and pages[-1]:
                 pages.append([])
-                y = top
-            stim.pos = (x, y)
+                y = first_y
+            stim.pos = (left, y)
             pages[-1].append(stim)
-            y -= needed + 0.9 * size                  # gap after a paragraph
+            y -= stim.boundingBox[1] + stim.gap
         return pages
 
     def _debrief_screen(self):
         """Build the end screens; return (draw(screen_n), n_screens).
 
-        Screen 0 is the thank-you page; screens 1.. are letter sheets.
+        Screen 0 is the thank-you page; screens 1.. are letter pages.
         """
         pages = self._debrief_pages()
-        w, h = self.SHEET_SIZE
-        sheet = visual.Rect(self.win, width=w, height=h, pos=(0, 10),
-                            fillColor=[0.95, 0.95, 0.95], lineColor=[0.5, 0.5, 0.5],
-                            lineWidth=1)
-        page_number = visual.TextStim(self.win, text="", pos=(0, 10 - h / 2 + 25),
-                                      height=14, color=[-0.4, -0.4, -0.4],
-                                      font=self.LETTER_FONT)
-        hint = self._label(f"{NAV_TEXT['back']}        {NAV_TEXT['next']}",
-                           -372, 16, DIM_TEXT)
+        page_number = self._label("", self._footer_y, 16, DIM_TEXT)
 
         def draw(screen_n):
             if screen_n == 0:
                 self.draw_page(SCREEN_TEXT["thankYou"], 0)
                 return
-            sheet.draw()
             for stim in pages[screen_n - 1]:
                 stim.draw()
+            self._page_back.draw()
+            last = screen_n == len(pages)
+            self._page_next.text = NAV_TEXT["last"] if last else NAV_TEXT["next"]
+            self._page_next.draw()
             page_number.text = f"Page {screen_n} of {len(pages)}"
             page_number.draw()
-            hint.draw()
         return draw, len(pages) + 1
 
     @_on_paper

@@ -10,7 +10,8 @@ import time
 import numpy as np
 from psychopy import visual
 
-from config import CALIBRATION, DISPLAY
+import geometry
+from config import CALIBRATION
 from presentation import check_escape
 
 
@@ -26,13 +27,9 @@ def gaze_calibration(win):
     targets_deg = np.array(CALIBRATION["targets_deg"])
     n_targets = targets_deg.shape[0]
 
-    screen_res_px = DISPLAY["size"]                  # [width_px, height_px]
-    screen_size_mm = CALIBRATION["screenSize_mm"]   # [width_mm, height_mm]
     view_dist_mm = CALIBRATION["viewDist_mm"]
 
-    px_per_mm = screen_res_px[0] / screen_size_mm[0]      # assumes square pixels
-    mm_per_deg = math.tan(math.radians(1)) * view_dist_mm
-    px_per_deg = mm_per_deg * px_per_mm
+    px_per_deg = geometry.px_per_deg()
 
     target_pos_px = targets_deg * px_per_deg
 
@@ -178,13 +175,12 @@ def gaze_calibration(win):
     return result
 
 
-def report_calibration(pres, result, attempt=1):
+def report_calibration(result, attempt=1):
     """Print the accuracy for the experimenter; return True if it passes.
 
     Passes only if both eyes were calibrated and each error is below
     CALIBRATION["calibrationCriterion_deg"] (screening criterion).
     The participant sees only pass or fail (experiment.run_calibration).
-    pres is unused.
     """
     threshold = CALIBRATION["calibrationCriterion_deg"]
     print(f"\n--- Calibration attempt {attempt} "
@@ -194,7 +190,6 @@ def report_calibration(pres, result, attempt=1):
     for eye in missing:
         print(f"{eye}: not calibrated  [FAIL]")
 
-    lines = []
     passed = not missing
     for eye, entry in result.items():
         ok = entry["accuracy_deg"] < threshold
@@ -202,7 +197,6 @@ def report_calibration(pres, result, attempt=1):
         line = (f"{eye}: {entry['accuracy_deg']:.2f} deg "
                 f"from {entry['n_points']} targets  "
                 f"[{'PASS' if ok else 'FAIL'}]")
-        lines.append(line)
         print(line)
 
     return passed
