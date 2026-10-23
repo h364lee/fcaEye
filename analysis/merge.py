@@ -14,13 +14,14 @@ Inputs, all in data/ and sharing one stem <id>_<date>_<time>:
 Outputs, next to the inputs:
     <stem>_gaze.csv       one row per tracker sample (every 2 ms)
         participantID, Timestamp, psychopyTime_s,
-        trialN, trialRecorded, phase, block, attempt, targetObj, previousObj,
-        trialPhase, gazeX, gazeY, region, whereGaze
+        trialN, trialRecorded, phase, block, attempt, blockStatus,
+        targetObj, previousObj, trialPhase, gazeX, gazeY, gazeUnits, region,
+        whereGaze
 
     <stem>_regions.csv    one row per visit: an unbroken stretch of samples
                           in the same region
-        participantID, trialN, phase, block, attempt, trialPhase,
-        region, start_s, end_s, duration_ms, samples
+        participantID, trialN, phase, block, attempt, blockStatus,
+        trialPhase, region, start_s, end_s, duration_ms, samples
 
 Terms
     sample   one row of the tracker file
@@ -29,6 +30,14 @@ Terms
     trial window   the samples of one trial (see assign_trials)
     region   g0..g7 (on a name), centre, other, or lost (no gaze from
              either eye); computed here from each 2-ms sample
+    Timestamp  the tracker's clock (us). It may restart after a
+             recalibration; psychopyTime_s is one clock for the session
+             (empty in a clock segment with no trial events to fit: the
+             recalibration itself)
+    blockStatus  complete, interrupted_break, interrupted_recalibration,
+             skipped or session_ended (see block_status)
+    gazeUnits  screen_px, or raw (camera values during a recalibration,
+             from the tracker file's LeftGazeX header; no region, no visits)
     whereGaze  the live state the experiment recorded during the trial
              (10-ms intervals, blinks filled; see response.GazeStateRecorder);
              empty outside dot_on to feedback (or blank)
@@ -39,6 +48,7 @@ The tracker file is not changed. Session-wide values are only in
 <stem>_session.csv; join on participantID.
 """
 
+import io
 import sys
 import warnings
 from pathlib import Path
@@ -71,23 +81,73 @@ END_GRACE_S = 0.05
 
 # ---------------------------------------------------------------- reading
 
-def read_tracker(path):
-    """Tracker samples after the tracker's clock reset.
+# Raw-mode column names (written during a recalibration) -> the usual names
+RAW_COLUMNS = {"LeftGazeX": "LeftScreenX", "LeftGazeY": "LeftScreenY",
+               "RightGazeX": "RightScreenX", "RightGazeY": "RightScreenY"}
 
-    About 0.4 s after recording starts, the tracker restarts its timestamps
-    (also seen in CRS's demo files). Samples before the last restart are on
-    a different clock, so they are dropped.
+
+def read_blocks(path):
+    """Read the tracker file, which can hold several header lines.
+
+    The tracker writes a new header line each time the results type
+    changes (a recalibration): "LeftGazeX ..." for raw camera values, then
+    "LeftScreenX ..." again for screen pixels. Each block is read with its
+    own header. gazeUnits is "raw" in raw blocks and "screen_px" otherwise.
     """
-    raw = pd.read_csv(path, skipinitialspace=True, dtype={"Comment": str})
-    raw.columns = raw.columns.str.strip()
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("Timestamp")]
+    blocks = []
+    for k, start in enumerate(starts):
+        end = starts[k + 1] if k + 1 < len(starts) else len(lines)
+        if end - start < 2:
+            continue                    # header with no samples
+        block = pd.read_csv(io.StringIO("\n".join(lines[start:end])),
+                            skipinitialspace=True, dtype={"Comment": str})
+        block.columns = block.columns.str.strip()
+        raw_units = "LeftGazeX" in block.columns
+        block = block.rename(columns=RAW_COLUMNS)
+        block["gazeUnits"] = "raw" if raw_units else "screen_px"
+        blocks.append(block)
+    raw = pd.concat(blocks, ignore_index=True)
     raw["Comment"] = raw["Comment"].fillna("").str.strip()
+    return raw
 
-    restarts = np.where(np.diff(raw["Timestamp"].to_numpy()) < 0)[0]
-    dropped = 0
-    if len(restarts):
-        dropped = restarts[-1] + 1
-        raw = raw.iloc[dropped:].reset_index(drop=True)
-    return raw, dropped
+
+def read_tracker(path):
+    """Tracker samples, with clock segments.
+
+    The tracker restarts its timestamps about 0.4 s after recording starts
+    (also seen in CRS's demo files). Samples before that first restart
+    (before any marker) are dropped.
+
+    Later restarts (StopTracking/StartTracking during a recalibration) are
+    kept. Each run of samples on one clock is a clock segment
+    (clockSegment, 0, 1, ...). t_us is a continuous time for ordering only:
+    each segment is placed 2 ms after the one before, so the real length
+    of the gap is not in it.
+
+    Returns (samples, dropped, number of later restarts).
+    """
+    raw = read_blocks(path)
+
+    time_us = raw["Timestamp"].to_numpy()
+    restarts = np.where(np.diff(time_us) < 0)[0] + 1   # first row of a new clock
+    marked = np.where(raw["Comment"] != "")[0]
+    first_marker = marked[0] if len(marked) else len(raw)
+    early = restarts[restarts <= first_marker]
+    dropped = int(early[-1]) if len(early) else 0
+    raw = raw.iloc[dropped:].reset_index(drop=True)
+    later = restarts[restarts > first_marker] - dropped
+
+    segment = np.zeros(len(raw), dtype=int)
+    t_us = raw["Timestamp"].to_numpy(dtype=float).copy()
+    for k, start in enumerate(later, start=1):
+        segment[start:] = k
+        t_us[start:] += t_us[start - 1] + 2000 - t_us[start]
+    raw["clockSegment"] = segment
+    raw["t_us"] = t_us
+    return raw, dropped, len(later)
 
 
 def read_markers(samples):
@@ -125,7 +185,7 @@ def assign_trials(samples, markers, trials, iti_s):
     "between_trials" or "after_trials".
     """
     n = len(samples)
-    time_us = samples["Timestamp"].to_numpy()
+    time_us = samples["t_us"].to_numpy()
     iti_us = iti_s * 1e6
 
     trial_n = np.full(n, -1)                      # -1 = no trial
@@ -224,6 +284,62 @@ def assign_trials(samples, markers, trials, iti_s):
     return samples, interrupted
 
 
+def label_recalibration(samples, markers):
+    """trialPhase "recalibration" from recalibration_start to recalibration_end.
+
+    (Which of these rows are raw camera values is in gazeUnits, from the
+    tracker file's header lines; see read_blocks.)
+    """
+    phase = samples["trialPhase"].to_numpy().copy()
+    recal_from = None
+    for index, event, _ in markers:
+        if event == "recalibration_start":
+            recal_from = index
+        elif event == "recalibration_end" and recal_from is not None:
+            phase[recal_from:index + 1] = "recalibration"
+            recal_from = None
+    if recal_from is not None:              # session ended during it
+        phase[recal_from:] = "recalibration"
+    samples["trialPhase"] = phase
+    return samples
+
+
+def block_status(samples, markers):
+    """blockStatus for every sample in a trial window.
+
+    One value per block attempt (phase, block, attempt):
+        complete                    the block ran to its end
+        interrupted_break           pause screen, Continue
+        interrupted_recalibration   pause screen, Recalibrate
+        skipped                     pause screen, Skip to next section
+        session_ended               the session ended during the block
+    """
+    status, current = {}, None
+    for _, event, fields in markers:
+        if event == "block_start":
+            current = (fields.get("phase", ""), fields.get("block", ""),
+                       fields.get("attempt", ""))
+            status[current] = "session_ended"   # until something else is seen
+        elif current is None:
+            continue
+        elif event == "block_end":
+            status[current], current = "complete", None
+        elif event == "block_abandoned":
+            reason = fields.get("reason")
+            if reason is None:                  # sessions before "reason"
+                reason = ("recalibration" if fields.get("recalibrate") == "True"
+                          else "break")
+            status[current], current = f"interrupted_{reason}", None
+        elif event == "section_skipped":
+            status[current], current = "skipped", None
+
+    keys = zip(samples["phase"], samples["block"].astype(str),
+               samples["attempt"].astype(str))
+    in_trial = samples["trialN"].notna().to_numpy()
+    return np.array([status.get(key, "") if inside else ""
+                     for key, inside in zip(keys, in_trial)], dtype=object)
+
+
 # ---------------------------------------------------------------- gaze
 
 def gaze_point(samples):
@@ -277,7 +393,8 @@ def assign_regions(samples, trials, name_radius_px, centre_radius_px):
 def visits(samples, blink_ms):
     """One row per visit.
 
-    A visit never crosses a change of trialN. A run of "lost" samples
+    A visit never crosses a change of trialN. Raw rows (recalibration) have
+    no region and no visits. A run of "lost" samples
     joins the visit around it if the region is the same on both sides and
     the run lasts at most blink_ms. Longer losses are their own "lost" visit.
 
@@ -285,8 +402,10 @@ def visits(samples, blink_ms):
     the next sample after the visit, so durations add up without gaps.
     """
     time_s = samples["psychopyTime_s"].to_numpy()
-    step = np.median(np.diff(time_s))
+    step = np.nanmedian(np.diff(time_s))
     next_time = np.append(time_s[1:], time_s[-1] + step)
+    # Next sample in another clock segment or without a time: end one step on.
+    next_time = np.where(np.isnan(next_time), time_s + step, next_time)
     region = samples["region"].to_numpy().copy()
 
     trial_key = samples["trialN"].astype("float").fillna(-1).to_numpy()
@@ -311,13 +430,14 @@ def visits(samples, blink_ms):
     ends = np.append(starts[1:], len(region)) - 1
 
     out = samples.iloc[starts][["participantID", "trialN", "phase", "block",
-                                "attempt", "trialPhase"]].reset_index(drop=True)
+                                "attempt", "blockStatus",
+                                "trialPhase"]].reset_index(drop=True)
     out["region"] = region[starts]
     out["start_s"] = time_s[starts]
     out["end_s"] = next_time[ends]
     out["duration_ms"] = (out["end_s"] - out["start_s"]) * 1000
     out["samples"] = ends - starts + 1
-    return out
+    return out[out["region"] != ""].reset_index(drop=True)   # raw rows: no region
 
 
 def where_gaze(samples, markers):
@@ -355,7 +475,8 @@ def where_gaze(samples, markers):
 # ---------------------------------------------------------------- clocks
 
 def event_pairs(samples, markers, trials, column_for):
-    """(marker timestamp, trial-file value) for every trial marker of a recorded trial."""
+    """(marker timestamp, trial-file value, clock segment) per trial marker
+    of a recorded trial."""
     by_trial = {int(t): row for t, row in zip(trials["trialN"], trials.to_dict("records"))}
     pairs = []
     for index, event, fields in markers:
@@ -367,28 +488,51 @@ def event_pairs(samples, markers, trials, column_for):
             continue
         value = pd.to_numeric(row[column], errors="coerce")
         if pd.notna(value):
-            pairs.append((samples["Timestamp"].iat[index], value))
-    return np.array(pairs, dtype=float).reshape(-1, 2)
+            pairs.append((samples["Timestamp"].iat[index], value,
+                          samples["clockSegment"].iat[index]))
+    return np.array(pairs, dtype=float).reshape(-1, 3)
 
 
 def fit_clock(samples, markers, trials):
-    """Straight line from tracker time (s) to PsychoPy time (s).
+    """PsychoPy time (s) for every sample, from a line per clock segment.
 
     Each trial event has a marker timestamp and a PsychoPy time in the
-    trial file. The clocks run at slightly different speeds, so the fit
-    has a rate as well as an offset.
+    trial file. The clocks run at slightly different speeds, so each
+    segment gets an offset and a rate. A segment with one event uses the
+    rate of the segment with the most events; a segment with none (e.g.
+    raw samples during a recalibration) gets no PsychoPy time.
+
+    Returns (psychopy_s, fits {segment: (offset, rate, n events)}, residuals ms).
     """
     pairs = event_pairs(samples, markers, trials, lambda c: c)
-    tracker_s, psychopy_s = pairs[:, 0] / 1e6, pairs[:, 1]
-    rate, offset = np.polyfit(tracker_s, psychopy_s, 1)
-    residual_ms = (psychopy_s - (offset + rate * tracker_s)) * 1000
-    return offset, rate, residual_ms
+    segments = pairs[:, 2].astype(int)
+    fits, residuals = {}, []
+    for seg in np.unique(segments):
+        p = pairs[segments == seg]
+        if len(p) >= 2:
+            rate, offset = np.polyfit(p[:, 0] / 1e6, p[:, 1], 1)
+            fits[seg] = (offset, rate, len(p))
+            residuals.extend((p[:, 1] - (offset + rate * p[:, 0] / 1e6)) * 1000)
+    if fits:
+        main_rate = max(fits.values(), key=lambda f: f[2])[1]
+        for seg in np.unique(segments):
+            if seg not in fits:
+                p = pairs[segments == seg]
+                fits[seg] = (p[0, 1] - main_rate * p[0, 0] / 1e6, main_rate, 1)
+
+    psychopy_s = np.full(len(samples), np.nan)
+    time_s = samples["Timestamp"].to_numpy() / 1e6
+    seg_of = samples["clockSegment"].to_numpy()
+    for seg, (offset, rate, _) in fits.items():
+        here = seg_of == seg
+        psychopy_s[here] = offset + rate * time_s[here]
+    return psychopy_s, fits, np.array(residuals)
 
 
 def check_lag(samples, markers, trials):
     """How far GetLastResult's timestamp trails the marker, per event (ms)."""
     pairs = event_pairs(samples, markers, trials, tracker_column)
-    return (pairs[:, 0] - pairs[:, 1]) / 1000
+    return (pairs[:, 0] - pairs[:, 1]) / 1000   # same clock segment
 
 
 # ---------------------------------------------------------------- main
@@ -414,21 +558,23 @@ def merge(trials_path):
     blink_ms = float(session["DWELL_SELECTION.blinkTimeout_ms"])
     participant = session["participantID"]
 
-    samples, dropped = read_tracker(tracker_path)
+    samples, dropped, restarts = read_tracker(tracker_path)
     markers = read_markers(samples)
     samples, interrupted = assign_trials(samples, markers, trials, iti_s)
+    samples = label_recalibration(samples, markers)
+    samples["blockStatus"] = block_status(samples, markers)
 
-    offset, rate, residual_ms = fit_clock(samples, markers, trials)
-    samples["psychopyTime_s"] = offset + rate * samples["Timestamp"] / 1e6
+    samples["psychopyTime_s"], fits, residual_ms = fit_clock(samples, markers, trials)
     samples["gazeX"], samples["gazeY"] = gaze_point(samples)
-    samples["region"] = assign_regions(samples, trials, name_radius_px, centre_radius_px)
+    region = assign_regions(samples, trials, name_radius_px, centre_radius_px)
+    samples["region"] = np.where(samples["gazeUnits"] == "raw", "", region)
     samples["whereGaze"] = where_gaze(samples, markers)
     samples["participantID"] = participant
 
     gaze = samples[["participantID", "Timestamp", "psychopyTime_s", "trialN",
-                    "trialRecorded", "phase", "block", "attempt", "targetObj",
-                    "previousObj", "trialPhase", "gazeX", "gazeY", "region",
-                    "whereGaze"]]
+                    "trialRecorded", "phase", "block", "attempt",
+                    "blockStatus", "targetObj", "previousObj", "trialPhase",
+                    "gazeX", "gazeY", "gazeUnits", "region", "whereGaze"]]
     gaze.to_csv(gaze_path, index=False, float_format="%.4f")
     regions = visits(samples, blink_ms)
     regions.to_csv(regions_path, index=False, float_format="%.4f")
@@ -436,11 +582,24 @@ def merge(trials_path):
     in_trials = samples["trialN"].notna()
     print(f"session:  {stem}")
     print(f"dropped:  {dropped} samples before the tracker's clock reset")
+    if restarts:
+        print(f"restarts: tracker clock restarted {restarts} more time(s) "
+              f"(recalibration); {len(fits)} clock segment(s) with events")
+    raw_n = (samples["gazeUnits"] == "raw").sum()
+    if raw_n:
+        print(f"raw:      {raw_n} samples in raw camera values (recalibration)")
+    statuses = samples.drop_duplicates(["phase", "block", "attempt"])
+    statuses = statuses[statuses["blockStatus"] != ""]
+    if (statuses["blockStatus"] != "complete").any():
+        print("blocks:   " + ", ".join(
+            f"{r.phase} {r.block}/{r.attempt} {r.blockStatus}"
+            for r in statuses.itertuples() if r.blockStatus != "complete"))
     print(f"samples:  {len(samples)}  (in trial windows: {in_trials.sum()})")
     print(f"trials:   {samples['trialN'].nunique()} with samples; "
           f"interrupted (no trial-file row): {interrupted or 'none'}")
-    print(f"clock:    PsychoPy = {offset:.4f} + {rate:.7f} x tracker  "
-          f"(drift {(rate - 1) * 1e6:.1f} ppm)")
+    for seg, (offset, rate, n_events) in sorted(fits.items()):
+        print(f"clock:    segment {seg}: PsychoPy = {offset:.4f} + {rate:.7f} "
+              f"x tracker  (drift {(rate - 1) * 1e6:.1f} ppm, {n_events} events)")
     print(f"fit:      {len(residual_ms)} events, residual sd "
           f"{residual_ms.std():.2f} ms, largest {abs(residual_ms).max():.2f} ms")
     lags = check_lag(samples, markers, trials)

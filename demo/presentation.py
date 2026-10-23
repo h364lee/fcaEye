@@ -75,7 +75,7 @@ class SkipSection(Exception):
 
 
 class RestartBlock(Exception):
-    """Continue or Recalibrate during trials: restart the current block.
+    """Continue or Recalibrate during trials: the current block is interrupted.
 
     recalibrate: True if a calibration should run first.
     """

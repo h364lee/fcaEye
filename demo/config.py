@@ -417,6 +417,10 @@ SCREEN_TEXT = {
     "blockRestart": [
         ("", "The round will start again from the beginning."),
     ],
+    # Learning: shown before the next round after an interrupted round
+    "blockNext": [
+        ("", "We will continue with the next round."),
+    ],
     # Pause screen (Esc); the researcher clicks one of PAUSE_BUTTONS
     "pause": [("Paused", "Please call the researcher.")],
     # After "End session", to confirm

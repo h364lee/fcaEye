@@ -241,36 +241,43 @@ def run_block(pres, session, block_info, targets, feedback):
     return rows
 
 
+def block_info(phase, block_n, attempt, stim_set, seed):
+    """Block columns, written on every trial row and in the block_start marker."""
+    return {"phase": phase, "block": block_n, "attempt": attempt,
+            "stimSet": stim_set.label, "blockSeed": seed}
+
+
+def block_interrupted(pres, session, info, restart, page):
+    """Mark an interrupted block, recalibrate if asked, then show page.
+
+    reason in the marker: "recalibration" (Recalibrate) or "break"
+    (Continue: a break, e.g. the participant moved, then back to the task).
+    """
+    reason = "recalibration" if restart.recalibrate else "break"
+    # "lastTrial", not "trial": merge.py reads "trial=" only on trial events.
+    eventlog.mark("block_abandoned", phase=info["phase"], block=info["block"],
+                  attempt=info["attempt"], lastTrial=session.trial_n,
+                  reason=reason)
+    print(f"{info['phase']} block {info['block']} interrupted ({reason}) "
+          f"at trial {session.trial_n}.")
+    if restart.recalibrate:
+        recalibrate(pres)
+    pres.show_pages(SCREEN_TEXT[page])
+
+
 def run_block_until_done(pres, session, phase, block_n, stim_set,
                          make_targets, feedback):
-    """Run a block, and run it again (new seed) each time it is abandoned.
-
-    Returns (rows, restarted); restarted is True if an attempt was abandoned.
-    """
+    """Run a block; if interrupted, run it again with a new seed (practice)."""
     pres.use_set(stim_set)
-    restarted = False
     attempt = 0
     while True:
         attempt += 1
         seed = design.new_seed()
-        block_info = {"phase": phase, "block": block_n, "attempt": attempt,
-                      "stimSet": stim_set.label, "blockSeed": seed}
+        info = block_info(phase, block_n, attempt, stim_set, seed)
         try:
-            rows = run_block(pres, session, block_info, make_targets(seed),
-                             feedback)
-            return rows, restarted
+            return run_block(pres, session, info, make_targets(seed), feedback)
         except RestartBlock as restart:
-            restarted = True
-            # "lastTrial", not "trial": merge.py reads every marker with
-            # "trial=" as a trial event.
-            eventlog.mark("block_abandoned", phase=phase, block=block_n,
-                          attempt=attempt, lastTrial=session.trial_n,
-                          recalibrate=restart.recalibrate)
-            print(f"{phase} block {block_n} abandoned at trial "
-                  f"{session.trial_n}.")
-            if restart.recalibrate:
-                recalibrate(pres)
-            pres.show_pages(SCREEN_TEXT["blockRestart"])
+            block_interrupted(pres, session, info, restart, "blockRestart")
 
 
 def run_practice(pres, session, stim_set):
@@ -300,20 +307,29 @@ def run_practice(pres, session, stim_set):
 def run_learning(pres, session, phase, stim_set):
     """Learning blocks until the criterion is met.
 
-    An abandoned block resets the consecutive count to 0. If the criterion
-    is not met in PHASES["learnMaxBlocks"] blocks, raises EndSession.
+    An interrupted block (pause screen: Continue or Recalibrate) is not
+    counted: the session moves on to the next block number, the in-a-row
+    count stays as it was, and only completed blocks count toward
+    PHASES["learnMaxBlocks"]. If the criterion is not met by then, raises
+    EndSession.
     """
+    pres.use_set(stim_set)
     try:
         in_a_row = 0
-        for block_n in range(1, PHASES["learnMaxBlocks"] + 1):
-            rows, restarted = run_block_until_done(
-                pres, session, phase, block_n, stim_set,
-                lambda seed: demo_cut(design.shuffled_sequence(
-                    seed, stim_set.objects, PHASES["learnBlockTrials"]),
-                    "learning"),
-                feedback=True)
-            if restarted:
-                in_a_row = 0
+        completed = 0
+        block_n = 0
+        while completed < PHASES["learnMaxBlocks"]:
+            block_n += 1
+            seed = design.new_seed()
+            info = block_info(phase, block_n, 1, stim_set, seed)
+            targets = demo_cut(design.shuffled_sequence(
+                seed, stim_set.objects, PHASES["learnBlockTrials"]), "learning")
+            try:
+                rows = run_block(pres, session, info, targets, feedback=True)
+            except RestartBlock as restart:
+                block_interrupted(pres, session, info, restart, "blockNext")
+                continue
+            completed += 1
 
             n_correct = sum(row["outcome"] == "correct" for row in rows)
             proportion = n_correct / len(rows)
@@ -326,7 +342,7 @@ def run_learning(pres, session, phase, stim_set):
             met = in_a_row >= PHASES["learnCriterionBlocks"]
             if met:
                 next_part = "test"
-            elif block_n == PHASES["learnMaxBlocks"]:
+            elif completed == PHASES["learnMaxBlocks"]:
                 next_part = "end"
             else:
                 next_part = "round"
@@ -335,13 +351,11 @@ def run_learning(pres, session, phase, stim_set):
                                   "percent": round(100 * proportion),
                                   "next":
                                       SCREEN_TEXT["roundEndNext"][next_part]})
-
             if met:
-                eventlog.mark("criterion_met", phase=phase, blocks=block_n)
+                eventlog.mark("criterion_met", phase=phase, blocks=completed)
                 return
 
-        eventlog.mark("criterion_not_met", phase=phase,
-                      blocks=PHASES["learnMaxBlocks"])
+        eventlog.mark("criterion_not_met", phase=phase, blocks=completed)
         raise EndSession(f"{phase}: criterion not met in "
                          f"{PHASES['learnMaxBlocks']} blocks")
     except SkipSection:
@@ -349,14 +363,39 @@ def run_learning(pres, session, phase, stim_set):
         print(f"{phase} skipped by the researcher.")
 
 
+def test_targets(stim_set, avoid_first=None):
+    """(seed, targets) for a test block: one Euler tour.
+
+    avoid_first: the new tour must not start with this object (the first
+    object of an interrupted tour). New seeds are drawn until it does not.
+    """
+    while True:
+        seed = design.new_seed()
+        targets = demo_cut(design.trial_sequence(seed, stim_set.objects), "test")
+        if targets[0] != avoid_first:
+            return seed, targets
+
+
 def run_test(pres, session, phase, stim_set):
-    """Run one test block: one Euler tour, no feedback."""
+    """Run one test block: one Euler tour, no feedback.
+
+    If interrupted (Continue or Recalibrate), it starts again as the next
+    attempt, with a new tour that starts from a different object.
+    """
+    pres.use_set(stim_set)
     try:
-        run_block_until_done(
-            pres, session, phase, 1, stim_set,
-            lambda seed: demo_cut(design.trial_sequence(seed, stim_set.objects),
-                                  "test"),
-            feedback=False)
+        attempt = 0
+        avoid_first = None
+        while True:
+            attempt += 1
+            seed, targets = test_targets(stim_set, avoid_first)
+            info = block_info(phase, 1, attempt, stim_set, seed)
+            try:
+                run_block(pres, session, info, targets, feedback=False)
+                return
+            except RestartBlock as restart:
+                block_interrupted(pres, session, info, restart, "blockRestart")
+                avoid_first = targets[0]
     except SkipSection:
         eventlog.mark("section_skipped", phase=phase)
         print(f"{phase} skipped by the researcher.")
@@ -392,10 +431,10 @@ def run_calibration(pres):
 def recalibrate(pres):
     """Calibrate again mid-session, with the data file open.
 
-    Samples between the recalibration_start and recalibration_end markers
-    are raw (not screen pixels); the merge step can drop them.
-    NOT YET TESTED: whether the data file keeps recording across
-    StopTracking/StartTracking.
+    The data file keeps recording. The tracker writes a new header line at
+    each change of results type (LeftGazeX for raw, LeftScreenX for screen
+    pixels), and restarts its timestamps at each StartTracking and again
+    about 0.4 s later. merge.py handles both.
     """
     eventlog.mark("recalibration_start")
     # The marker is written with the next sample, so let one arrive first.
