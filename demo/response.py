@@ -221,11 +221,15 @@ class GazeStateRecorder:
     """Live gaze state during a trial, sent to the tracker file on each change.
 
     Samples are grouped into GAZE_STATE["interval_ms"] intervals of tracker
-    time. Each interval gets one state from the mean gaze of its samples:
+    time. Each interval gets one state from its first tracked sample:
         g0-g7   within the selection radius of a name (once names are shown)
         centre  within the central-fixation radius
         other   anywhere else
         lost    no eye tracked in any sample of the interval
+    The first tracked sample is used, not the mean: within 10 ms the gaze
+    spread is about 0.1 deg against circles of about 2 deg. In session
+    000000_20261023_2 the two rules gave a different state in 0.5% of
+    intervals, almost all during saccades (state changes up to 10 ms later).
     A loss up to blinkTimeout_ms with the same state before and after is
     given that state (a blink). Longer losses, or a different state after,
     stay "lost".
@@ -255,7 +259,7 @@ class GazeStateRecorder:
         self.end_us = None
         self.names_from_us = None     # names count only once they are shown
         self.interval = None          # start (us) of the interval being filled
-        self.points = []              # gaze points in that interval
+        self.first_point = None       # first tracked gaze point in that interval
         self.samples = 0              # samples in that interval, lost included
         self.state = None             # last state sent
         self.lost_from = None         # start of a loss not yet settled
@@ -280,8 +284,9 @@ class GazeStateRecorder:
                 self.interval = interval
             self.samples += 1
             pos = gaze_point(s)
-            if pos is not None:
-                self.points.append(pos)
+            # Only the first tracked sample decides the interval's state.
+            if pos is not None and self.first_point is None:
+                self.first_point = pos
         self._send()
 
     def stop(self, end_us):
@@ -299,10 +304,9 @@ class GazeStateRecorder:
         self.active = False
 
     def _classify(self):
-        if not self.points:
+        if self.first_point is None:
             return "lost"
-        x = sum(p[0] for p in self.points) / len(self.points)
-        y = sum(p[1] for p in self.points) / len(self.points)
+        x, y = self.first_point
         if self.names_from_us is not None and self.interval >= self.names_from_us:
             name = geometry.object_at((x, y), self.positions, self.ring_order,
                                       self.name_radius_px)
@@ -317,7 +321,7 @@ class GazeStateRecorder:
         state = self._classify()
         begin = max(self.interval, self.start_us)
         end = self.interval + self.interval_us
-        self.interval, self.points, self.samples = None, [], 0
+        self.interval, self.first_point, self.samples = None, None, 0
 
         if state == "lost":
             if self.lost_from is None:
