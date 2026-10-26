@@ -4,7 +4,7 @@ Run by hand after a session:
     cd analysis
     python merge.py                                        # newest session in data/
     python merge.py ../data/877787_20260925/877787_20260925_trials.csv
-    python merge.py 000001 877787                          # every session of these SONA IDs
+    python merge.py P3f9a1c07                              # every session of this participant ID
 
 Each session has its own folder, data/<stem>/, with stem <id>_<date>
 (YYYYmmdd; a second session that day has _2, _3 ...). Inputs in it:
@@ -652,9 +652,9 @@ def trial_files():
     return [*DATA_DIR.glob("*/*_trials.csv"), *DATA_DIR.glob("*_trials.csv")]
 
 
-def sessions_for(sona_id):
+def sessions_for(pid):
     """Trial files of one participant."""
-    return sorted(p for p in trial_files() if p.name.startswith(f"{sona_id}_"))
+    return sorted(p for p in trial_files() if p.name.startswith(f"{pid}_"))
 
 
 def merge_if_new(trials_path):
@@ -670,7 +670,7 @@ def merge_if_new(trials_path):
 
 
 if __name__ == "__main__":
-    # Arguments: trial file paths or SONA IDs. None: newest session in data/.
+    # Arguments: trial file paths or participant IDs. None: newest session in data/.
     arguments = sys.argv[1:]
     if not arguments:
         newest = max(trial_files(), key=lambda p: p.stat().st_mtime)
@@ -683,6 +683,6 @@ if __name__ == "__main__":
         found = sessions_for(argument)
         if not found:
             known = sorted({p.name.split("_")[0] for p in trial_files()})
-            print(f"no sessions for SONA ID {argument}; IDs in data/: {', '.join(known)}")
+            print(f"no sessions for participant ID {argument}; IDs in data/: {', '.join(known)}")
         for trials_path in found:
             merge_if_new(trials_path)

@@ -172,6 +172,9 @@ PATHS = {
     "dataDir": PROJECT_DIR / "data",                    # output files
     "debriefLetter": PROJECT_DIR / "demo" / "debrief_letter.txt",   # shown at the end
     "fontDir": PROJECT_DIR / "demo" / "fonts",          # page fonts (PAGE_STYLE)
+    # SONA ID -> participant ID; the only link between them. Outside the
+    # project folder, so it is never in git or copied with the data.
+    "keyFile": PROJECT_DIR.parent / "participant_key" / "participant_key.csv",
 }
 
 

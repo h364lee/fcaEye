@@ -18,6 +18,7 @@ import calibrate
 import design
 import eventlog
 import geometry
+from pid import assign_pid
 import response
 import trialdata
 from config import (CENTRAL_FIXATION, COUNTERBALANCE, DEMO_TRIALS,
@@ -484,13 +485,16 @@ def main():
     session = None                    # set once recording starts
     accuracy = {}                     # stays empty if calibration is skipped
     calibration_attempts = 0
-    participant = {"sonaID": "debug", "age": "", "gender": ""}
+    participant = {"age": "", "gender": ""}
+    pid = "debug"                     # no demographics: no SONA ID, no key file
     try:
         # Inside the try, so Esc here still closes the window and tracker.
         pres.show_pages(SCREEN_TEXT["greeting"])
         if SESSION["yesDemographics"]:
             participant = ask_demographics(pres)
-        pid = participant["sonaID"]
+            # The SONA ID goes only into the key file, never into the data.
+            pid = assign_pid(participant.pop("sonaID"))
+        print(f"Participant ID: {pid}")
 
         pres.show_pages(SCREEN_TEXT["task"])
 
@@ -573,7 +577,7 @@ def main():
         pres.show_end()
         pres.close()
 
-    print(participant)
+    print(pid, participant)
     if session is not None:
         for r in session.rows:
             print(r["phase"], r["block"], r["attempt"], r["trialN"],

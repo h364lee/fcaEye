@@ -47,7 +47,7 @@ _writer = None
 _participant_id = None
 
 
-def session_columns(participant, accuracy, session_start, screen_rate,
+def session_columns(participant, accuracy, screen_rate,
                     tracker_rate, tracked_eyes, stim_sets,
                     calibration_attempts):
     """Session-wide values, except the config settings.
@@ -61,7 +61,6 @@ def session_columns(participant, accuracy, session_start, screen_rate,
         "phase2Relation": design.phase2_relation(),     # isom or shift
     })
     columns.update({
-        "sessionStart": session_start,
         # To trace version differences later
         "pythonVersion": platform.python_version(),
         "psychopyVersion": version("psychopy"),
