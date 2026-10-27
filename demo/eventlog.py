@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Event markers in the tracker data file, one per comment:
     event=object_on trial=3
 """

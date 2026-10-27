@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """The window and everything drawn in it: trial screens, text pages,
 question screens, the pause screen and the debrief letter.
 """

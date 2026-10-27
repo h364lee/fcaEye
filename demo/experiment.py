@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Session and trial flow.
 
 Session: greeting, demographics -> instructions -> calibration ->

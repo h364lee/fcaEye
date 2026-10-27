@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Counterbalancing, stimulus sets, trial orders, and design checks.
 
 An object's image file name is its CONTEXT row, mapped to features by

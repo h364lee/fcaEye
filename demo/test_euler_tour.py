@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Check that design.trial_sequence balances every transition, for every seed.
 
 Run after changing the sequence code, CONTEXT, or EULER_TOUR:

@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Turn one session's tracker file into one analysis file, _gaze.csv.
 
 Run by hand after a session:

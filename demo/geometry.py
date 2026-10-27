@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Ring layout, selection circles, and layout checks.
 
 Positions are in pixels, origin at the screen centre, y up (PsychoPy).

@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Session and trial data files.
 
     data/<name>/<name>.csv                tracker samples and markers

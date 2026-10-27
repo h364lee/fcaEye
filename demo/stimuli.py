@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Draw one image per combination of the 6 binary visual features.
 
 Features only, not attributes: design.object_image() maps objects to images.

@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Build the formal context from config.CONTEXT and draw its concept lattice.
 
 Run:  python lattice.py   (prints each concept, saves out/lattice.png)

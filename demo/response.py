@@ -1,3 +1,6 @@
+# AI usage: code co-written with Claude Opus 5.5.
+# Research questions, experimental design and program requirements came from Caleb and Britt.
+
 """Central fixation gate, gaze-dwell selection and the live gaze state.
 
 The responder is polled, not blocking, so the trial loop can keep drawing
