@@ -22,7 +22,7 @@ def gaze_calibration(win):
     the fixation check reads raw pupil/glint vectors.
 
     Returns e.g. {"left": {"accuracy_deg": 0.34, "n_points": 9}, ...}.
-    An eye that is not tracked or got no fixations is left out.
+    An eye that is not tracked or timed out is left out.
     """
     targets_deg = np.array(CALIBRATION["targets_deg"])
     n_targets = targets_deg.shape[0]
@@ -39,13 +39,13 @@ def gaze_calibration(win):
 
     fix_dot_in_px = CALIBRATION["fixInDot_deg"] * px_per_deg
     fix_dot_out_px = CALIBRATION["fixOutDot_deg"] * px_per_deg
-    min_dur_s = CALIBRATION["minFixDur_ms"] / 1000
-    setup_delay_s = CALIBRATION["setupDelay_ms"] / 1000
-    fix_timeout_s = CALIBRATION["fixTimeout_s"]
+    min_dur_ms = CALIBRATION["minFixDur_ms"]
+    setup_delay_ms = CALIBRATION["setupDelay_ms"]
+    fix_timeout_ms = CALIBRATION["fixTimeout_ms"]
     fix_threshold_px = CALIBRATION["fixThreshold_px"]
 
     _, _, sample_rate, _, _ = LiveTrack.GetCaptureConfig()
-    fix_dur_samples = round(min_dur_s * sample_rate)
+    fix_dur_samples = round(min_dur_ms / 1000 * sample_rate)   # rate is per s
 
     track_left, track_right = LiveTrack.GetTracking()
 
@@ -76,7 +76,7 @@ def gaze_calibration(win):
 
         while True:
             check_escape()
-            elapsed = time.time() - t0
+            elapsed = (time.time() - t0) * 1000       # ms
             d = LiveTrack.GetBufferedEyePositions(0, fix_dur_samples, 0)
 
             # Only judge a full window; max()/min() fail on an empty buffer.
@@ -97,7 +97,7 @@ def gaze_calibration(win):
                 pg_dist_right = max(max(vect_x_r) - min(vect_x_r),
                                     max(vect_y_r) - min(vect_y_r))
 
-                settled = elapsed > setup_delay_s
+                settled = elapsed > setup_delay_ms
 
                 if (not got_fix_left and settled
                         and pg_dist_left <= fix_threshold_px and all(tracked)):
@@ -121,7 +121,7 @@ def gaze_calibration(win):
                 win.flip()
                 break
 
-            if elapsed > fix_timeout_s:
+            if elapsed > fix_timeout_ms:
                 if not got_fix_left and track_left:
                     print(f"Target {i + 1}: left eye timed out")
                 if not got_fix_right and track_right:

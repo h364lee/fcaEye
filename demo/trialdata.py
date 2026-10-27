@@ -25,22 +25,22 @@ SETTINGS = ["DISPLAY", "GEOMETRY", "TIMING", "ORDER", "EULER_TOUR", "PHASES",
             "DWELL_SELECTION", "CENTRAL_FIXATION", "GAZE_STATE",
             "CALIBRATION"]
 
-# Marker name -> column holding the PsychoPy time (s) the marker was written.
+# Marker name -> column holding the PsychoPy time (ms) the marker was written.
 EVENT_TIMES = {
-    "dot_on": "dotOn_s",
-    "fixation_held": "fixationHeld_s",
-    "names_on": "namesOn_s",
-    "object_on": "objectOn_s",
-    "selection": "response_s",
-    "timeout": "response_s",
-    "feedback_on": "feedbackOn_s",
-    "blank_on": "blankOn_s",
+    "dot_on": "dotOn_ms",
+    "fixation_held": "fixationHeld_ms",
+    "names_on": "namesOn_ms",
+    "object_on": "objectOn_ms",
+    "selection": "response_ms",
+    "timeout": "response_ms",
+    "feedback_on": "feedbackOn_ms",
+    "blank_on": "blankOn_ms",
 }
 
 
 def tracker_column(column):
-    """Tracker-clock column of an event: "objectOn_s" -> "objectOnTracker_us"."""
-    return column.removesuffix("_s") + "Tracker_us"
+    """Tracker-clock column of an event: "objectOn_ms" -> "objectOnTracker_us"."""
+    return column.removesuffix("_ms") + "Tracker_us"
 
 _file = None
 _writer = None
@@ -110,7 +110,7 @@ def trial_column_names():
              "rotation_deg"]
     for obj in NAMES:
         names += [f"{obj}X", f"{obj}Y"]
-    names += ["previewDur_s", "selected", "outcome", "selection_ms",
+    names += ["previewDur_ms", "selected", "outcome", "selection_ms",
               "firstMove_ms"]
     event_columns = list(dict.fromkeys(EVENT_TIMES.values()))   # unique, in order
     names += event_columns

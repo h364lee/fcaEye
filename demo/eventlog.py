@@ -21,7 +21,7 @@ _last_sent = 0.0
 # the call still reports success. So markers are kept this far apart.
 # Trial markers have a screen flip between them, so only markers sent back
 # to back are delayed.
-MIN_GAP_S = 0.004
+MIN_GAP_MS = 4
 
 
 def open_session(participant_id):
@@ -75,7 +75,7 @@ def mark(event, **fields):
     # Busy-wait rather than sleep: on Windows, sleep can overshoot by
     # several milliseconds.
     global _last_sent
-    while time.perf_counter() - _last_sent < MIN_GAP_S:
+    while (time.perf_counter() - _last_sent) * 1000 < MIN_GAP_MS:
         pass
 
     # The binding prints a success line on every call, which hides real

@@ -65,34 +65,34 @@ def newest_tracked():
     return None
 
 
-def wait_for_central_fixation(pres, hold_s, positions=None):
-    """Wait until gaze has stayed on the central dot for hold_s seconds.
+def wait_for_central_fixation(pres, hold_ms, positions=None):
+    """Wait until gaze has stayed on the central dot for hold_ms.
 
     positions: name positions to draw as well, or None for the dot alone.
     Leaving the dot resets the count to zero. A loss of gaze up to
     blinkTimeout_ms pauses the count; a longer one resets it.
 
-    Raises FixationTimeout after CENTRAL_FIXATION["centralTimeout_s"].
+    Raises FixationTimeout after CENTRAL_FIXATION["centralTimeout_ms"].
     """
     radius_px = CENTRAL_FIXATION['centralRadius_deg'] * geometry.px_per_deg()
-    timeout_s = CENTRAL_FIXATION['centralTimeout_s']
-    blink_gap_s = DWELL_SELECTION['blinkTimeout_ms'] / 1000
+    timeout_ms = CENTRAL_FIXATION['centralTimeout_ms']
+    blink_gap_ms = DWELL_SELECTION['blinkTimeout_ms']
 
     read_samples()          # older samples: recorded as states, not judged here
     clock = core.Clock()
-    held_s = 0.0
+    held_ms = 0.0
     last = 0.0
     gap_start = None
 
-    while held_s < hold_s:
-        now = clock.getTime()
+    while held_ms < hold_ms:
+        now = clock.getTime() * 1000            # PsychoPy clock is in s
         dt = now - last
         last = now
 
-        if now > timeout_s:
+        if now > timeout_ms:
             raise FixationTimeout(
-                f"central fixation not held for {hold_s} s "
-                f"within the {timeout_s} s limit"
+                f"central fixation not held for {hold_ms:.0f} ms "
+                f"within the {timeout_ms} ms limit"
             )
 
         check_escape()
@@ -101,15 +101,15 @@ def wait_for_central_fixation(pres, hold_s, positions=None):
         if pos is None:
             if gap_start is None:
                 gap_start = now
-            elif now - gap_start > blink_gap_s:
-                held_s = 0.0
+            elif now - gap_start > blink_gap_ms:
+                held_ms = 0.0
         else:
             gap_start = None
             # Gaze origin is the screen centre.
             if math.hypot(*pos) <= radius_px:
-                held_s += dt
+                held_ms += dt
             else:
-                held_s = 0.0
+                held_ms = 0.0
 
         if positions is not None:
             pres.draw_names(positions)
@@ -136,8 +136,8 @@ class GazeDwellResponder:
         self.stability_px = DWELL_SELECTION["dwellRadius_deg"] * geometry.px_per_deg()
         # Same radius as wait_for_central_fixation, so the two agree.
         self.central_px = CENTRAL_FIXATION["centralRadius_deg"] * geometry.px_per_deg()
-        self.dwell_s = DWELL_SELECTION["dwell_ms"] / 1000
-        self.blink_gap_s = DWELL_SELECTION["blinkTimeout_ms"] / 1000
+        self.dwell_ms = DWELL_SELECTION["dwell_ms"]
+        self.blink_gap_ms = DWELL_SELECTION["blinkTimeout_ms"]
 
         # The rest of the state is set in start(). Not called here, or the
         # buffer would be cleared twice.
@@ -150,7 +150,7 @@ class GazeDwellResponder:
         self.first_move_ms = None
         self.anchor = None        # gaze position where the current dwell began
         self.dwell_on = None      # name at the anchor
-        self.dwell_accum = 0.0    # seconds
+        self.dwell_accum = 0.0    # ms
         self.last_poll = 0.0
         self.gap_start = None     # start of the current loss of gaze
         read_samples()  # samples before the cue: recorded as states, not judged
@@ -166,7 +166,7 @@ class GazeDwellResponder:
         if self.outcome is not None:
             return
 
-        now = self.clock.getTime()
+        now = self.clock.getTime() * 1000       # PsychoPy clock is in s
         dt = now - self.last_poll
         self.last_poll = now
 
@@ -176,7 +176,7 @@ class GazeDwellResponder:
         if pos is None:
             if self.gap_start is None:
                 self.gap_start = now
-            elif now - self.gap_start > self.blink_gap_s:
+            elif now - self.gap_start > self.blink_gap_ms:
                 self.anchor = None
                 self.dwell_on = None
                 self.dwell_accum = 0.0
@@ -185,7 +185,7 @@ class GazeDwellResponder:
 
         if (self.first_move_ms is None
                 and math.hypot(*pos) > self.central_px):
-            self.first_move_ms = now * 1000
+            self.first_move_ms = now
 
         here = geometry.object_at(pos, self.positions, self.ring_order,
                                   self.radius_px)
@@ -200,10 +200,10 @@ class GazeDwellResponder:
             return
 
         self.dwell_accum += dt
-        if self.dwell_on is not None and self.dwell_accum >= self.dwell_s:
+        if self.dwell_on is not None and self.dwell_accum >= self.dwell_ms:
             self.outcome = {
                 "selection": self.dwell_on,
-                "selection_ms": now * 1000,
+                "selection_ms": now,
                 "first_move_ms": self.first_move_ms,
             }
 

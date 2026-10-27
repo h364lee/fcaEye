@@ -8,7 +8,6 @@ Esc opens the pause screen (presentation.pause_menu).
 
 import random
 import sys
-from datetime import datetime
 sys.path.insert(0, r"C:\Users\Public\Documents\CRS LiveTrack Python Bindings")
 import LiveTrack
 
@@ -88,7 +87,7 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
         # Three times per event: PsychoPy time and tracker time (both in
         # the trial file), and a marker in the tracker file.
         column = trialdata.EVENT_TIMES[event]
-        times[column] = core.getTime()
+        times[column] = core.getTime() * 1000         # PsychoPy clock, ms
         times[trialdata.tracker_column(column)] = eventlog.tracker_time_us()
         eventlog.mark(event, trial=trial_n, **fields)
 
@@ -106,7 +105,7 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
     # Live gaze state (whereGaze), from the dot until feedback or blank
     response.STATES.start(trial_n, positions, pres.ring_order,
                           pres.name_radius_px, tracker_us("dot_on"))
-    response.wait_for_central_fixation(pres, CENTRAL_FIXATION['centralHold_ms'] / 1000)
+    response.wait_for_central_fixation(pres, CENTRAL_FIXATION['centralHold_ms'])
     mark("fixation_held")
 
     # --- 2. preview -------------------------------------------------------
@@ -116,8 +115,8 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
     pres.flip()
     mark("names_on")
     response.STATES.show_names(tracker_us("names_on"))
-    preview_s = random.uniform(*TIMING['previewDurRange'])
-    response.wait_for_central_fixation(pres, preview_s, positions)
+    preview_ms = random.uniform(*TIMING['previewDurRange_ms'])
+    response.wait_for_central_fixation(pres, preview_ms, positions)
 
     # --- 3. cue and response ---------------------------------------------
     responder = response.GazeDwellResponder(positions, pres.ring_order,
@@ -131,7 +130,8 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
 
     # The responder is polled once per frame.
     clock = core.Clock()
-    while clock.getTime() < TIMING['responseTimeout_s'] and responder.result() is None:
+    while (clock.getTime() * 1000 < TIMING['responseTimeout_ms']
+           and responder.result() is None):
         check_escape()
         responder.poll()
         pres.draw_names(positions)
@@ -152,13 +152,13 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
         pres.flip()
         mark("feedback_on")
         response.STATES.stop(tracker_us("feedback_on"))
-        core.wait(TIMING['feedbackDur'])
+        core.wait(TIMING['feedbackDur_ms'] / 1000)    # core.wait takes s
 
     # --- 5. blank interval ------------------------------------------------
     pres.flip()
     mark("blank_on")
     response.STATES.stop(tracker_us("blank_on"))   # test blocks (no feedback)
-    core.wait(TIMING['iti'])
+    core.wait(TIMING['iti_ms'] / 1000)
 
     if outcome is None:
         result = "timeout"
@@ -181,7 +181,7 @@ def run_trial(pres, target, trial_n, previous_obj, feedback=True):
         row[f"{obj}X"] = round(x, 1)
         row[f"{obj}Y"] = round(y, 1)
     row.update({
-        "previewDur_s": preview_s,
+        "previewDur_ms": preview_ms,
         "selected": selection,
         "outcome": result,
         "selection_ms": None if outcome is None else outcome["selection_ms"],
@@ -522,7 +522,6 @@ def main():
 
         columns = trialdata.session_columns(
             participant, accuracy,
-            datetime.now().isoformat(timespec="seconds"),
             screen_rate, tracker_rate, tracked_eyes, used_sets,
             calibration_attempts)
         # Needed later to judge where gaze was

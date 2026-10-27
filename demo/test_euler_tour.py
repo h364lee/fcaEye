@@ -16,7 +16,7 @@ from design import trial_sequence
 def test_euler_tour():
     objects = list(CONTEXT)
     repeats = EULER_TOUR["tour_repeats"]
-    stay = EULER_TOUR["stay_trial"]
+    stay = EULER_TOUR["allow_stay"]
 
     pairs = [(i, j) for i in objects for j in objects if stay or i != j]
     expected = {pair: repeats for pair in pairs}

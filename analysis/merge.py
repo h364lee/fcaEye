@@ -14,7 +14,7 @@ Each session has its own folder, data/<stem>/, with stem <id>_<date>
 
 Output, in the same folder:
     <stem>_gaze.csv       one row per tracker sample (every 2 ms)
-        participantID, Timestamp, psychopyTime_s,
+        participantID, Timestamp, psychopyTime_ms,
         trialN, trialRecorded, phase, block, attempt, blockStatus,
         targetObj, previousObj, trialPhase, gazeX, gazeY, gazeUnits, region,
         whereGaze
@@ -22,7 +22,7 @@ Output, in the same folder:
 Visits (one row per unbroken stretch of samples in one region) are not
 saved; load_visits(gaze_path) builds them from _gaze.csv when needed:
         participantID, trialN, phase, block, attempt, blockStatus,
-        trialPhase, region, start_s, end_s, duration_ms, samples
+        trialPhase, region, start_ms, end_ms, duration_ms, samples
 
 Terms
     sample   one row of the tracker file
@@ -32,7 +32,7 @@ Terms
     region   g0..g7 (on a name), centre, other, or lost (no gaze from
              either eye); computed here from each 2-ms sample
     Timestamp  the tracker's clock (us). It may restart after a
-             recalibration; psychopyTime_s is one clock for the session
+             recalibration; psychopyTime_ms is one clock for the session
              (empty in a clock segment with no trial events to fit: the
              recalibration itself)
     blockStatus  complete, interrupted_break, interrupted_recalibration,
@@ -77,7 +77,7 @@ OBJECTS = [f"g{i}" for i in range(8)]
 
 # Seconds after blank_on + ITI to close a window that no marker closed.
 # About three frames at 60 Hz.
-END_GRACE_S = 0.05
+END_GRACE_MS = 50
 
 
 # ---------------------------------------------------------------- reading
@@ -164,7 +164,7 @@ def read_markers(samples):
 
 # ---------------------------------------------------------------- trials
 
-def assign_trials(samples, markers, trials, iti_s):
+def assign_trials(samples, markers, trials, iti_ms):
     """trialN, trialRecorded, phase ... trialPhase for every sample.
 
     A trial window starts at the trial's dot_on marker and ends at the
@@ -172,7 +172,7 @@ def assign_trials(samples, markers, trials, iti_s):
       - the next dot_on or a TRIAL_ENDERS marker. After a complete trial
         this comes about one ITI after blank_on. Before blank_on it means
         the trial was interrupted.
-      - blank_on + ITI + END_GRACE_S, if no such marker comes (e.g. the
+      - blank_on + ITI + END_GRACE_MS, if no such marker comes (e.g. the
         program stopped). The grace covers the frame or two before the
         next marker, so consecutive trials have no gap.
     Time on the pause screen and between blocks belongs to no trial.
@@ -187,7 +187,7 @@ def assign_trials(samples, markers, trials, iti_s):
     """
     n = len(samples)
     time_us = samples["t_us"].to_numpy()
-    iti_us = iti_s * 1e6
+    iti_us = iti_ms * 1000                        # tracker clock is in us
 
     trial_n = np.full(n, -1)                      # -1 = no trial
     trial_phase = np.full(n, "", dtype=object)
@@ -226,7 +226,7 @@ def assign_trials(samples, markers, trials, iti_s):
             }
             previous_target = fields.get("target")
         elif event == "blank_on" and open_trial is not None:
-            open_trial[2] = time_us[index] + iti_us + END_GRACE_S * 1e6
+            open_trial[2] = time_us[index] + iti_us + END_GRACE_MS * 1000
         if event in EVENT_TIMES:
             trial_phase[index] = event
     close(n)
@@ -399,14 +399,14 @@ def visits(samples, blink_ms):
     joins the visit around it if the region is the same on both sides and
     the run lasts at most blink_ms. Longer losses are their own "lost" visit.
 
-    start_s is the PsychoPy time of the first sample; end_s is the time of
+    start_ms is the PsychoPy time of the first sample; end_ms is the time of
     the next sample after the visit, so durations add up without gaps.
     """
-    time_s = samples["psychopyTime_s"].to_numpy()
-    step = np.nanmedian(np.diff(time_s))
-    next_time = np.append(time_s[1:], time_s[-1] + step)
+    time_ms = samples["psychopyTime_ms"].to_numpy()
+    step = np.nanmedian(np.diff(time_ms))
+    next_time = np.append(time_ms[1:], time_ms[-1] + step)
     # Next sample in another clock segment or without a time: end one step on.
-    next_time = np.where(np.isnan(next_time), time_s + step, next_time)
+    next_time = np.where(np.isnan(next_time), time_ms + step, next_time)
     region = samples["region"].to_numpy().copy()
 
     trial_key = samples["trialN"].astype("float").fillna(-1).to_numpy()
@@ -423,7 +423,7 @@ def visits(samples, blink_ms):
         before, after = s - 1, e
         if (part[before] == part[s] == part[after]
                 and region[before] == region[after] != "lost"
-                and (time_s[after] - time_s[s]) * 1000 <= blink_ms):
+                and time_ms[after] - time_ms[s] <= blink_ms):
             region[s:e] = region[before]
 
     change = np.concatenate([[True], (region[1:] != region[:-1]) | (part[1:] != part[:-1])])
@@ -434,9 +434,9 @@ def visits(samples, blink_ms):
                                 "attempt", "blockStatus",
                                 "trialPhase"]].reset_index(drop=True)
     out["region"] = region[starts]
-    out["start_s"] = time_s[starts]
-    out["end_s"] = next_time[ends]
-    out["duration_ms"] = (out["end_s"] - out["start_s"]) * 1000
+    out["start_ms"] = time_ms[starts]
+    out["end_ms"] = next_time[ends]
+    out["duration_ms"] = out["end_ms"] - out["start_ms"]
     out["samples"] = ends - starts + 1
     return out[out["region"] != ""].reset_index(drop=True)   # raw rows: no region
 
@@ -503,7 +503,8 @@ def fit_clock(samples, markers, trials):
     rate of the segment with the most events; a segment with none (e.g.
     raw samples during a recalibration) gets no PsychoPy time.
 
-    Returns (psychopy_s, fits {segment: (offset, rate, n events)}, residuals ms).
+    Both clocks are fitted in ms (tracker us / 1000).
+    Returns (psychopy_ms, fits {segment: (offset, rate, n events)}, residuals ms).
     """
     pairs = event_pairs(samples, markers, trials, lambda c: c)
     segments = pairs[:, 2].astype(int)
@@ -511,23 +512,23 @@ def fit_clock(samples, markers, trials):
     for seg in np.unique(segments):
         p = pairs[segments == seg]
         if len(p) >= 2:
-            rate, offset = np.polyfit(p[:, 0] / 1e6, p[:, 1], 1)
+            rate, offset = np.polyfit(p[:, 0] / 1000, p[:, 1], 1)
             fits[seg] = (offset, rate, len(p))
-            residuals.extend((p[:, 1] - (offset + rate * p[:, 0] / 1e6)) * 1000)
+            residuals.extend(p[:, 1] - (offset + rate * p[:, 0] / 1000))
     if fits:
         main_rate = max(fits.values(), key=lambda f: f[2])[1]
         for seg in np.unique(segments):
             if seg not in fits:
                 p = pairs[segments == seg]
-                fits[seg] = (p[0, 1] - main_rate * p[0, 0] / 1e6, main_rate, 1)
+                fits[seg] = (p[0, 1] - main_rate * p[0, 0] / 1000, main_rate, 1)
 
-    psychopy_s = np.full(len(samples), np.nan)
-    time_s = samples["Timestamp"].to_numpy() / 1e6
+    psychopy_ms = np.full(len(samples), np.nan)
+    tracker_ms = samples["Timestamp"].to_numpy() / 1000
     seg_of = samples["clockSegment"].to_numpy()
     for seg, (offset, rate, _) in fits.items():
         here = seg_of == seg
-        psychopy_s[here] = offset + rate * time_s[here]
-    return psychopy_s, fits, np.array(residuals)
+        psychopy_ms[here] = offset + rate * tracker_ms[here]
+    return psychopy_ms, fits, np.array(residuals)
 
 
 def check_lag(samples, markers, trials):
@@ -551,7 +552,7 @@ def merge(trials_path):
         sys.exit(f"{trials_path.name}: recorded before the session file existed; "
                  "not supported")
     session = pd.read_csv(session_path, dtype=str, keep_default_na=False).iloc[0]
-    iti_s = float(session["TIMING.iti"])
+    iti_ms = float(session["TIMING.iti_ms"])
     name_radius_px = float(session["nameSelectRadius_px"])
     centre_radius_px = (float(session["CENTRAL_FIXATION.centralRadius_deg"])
                         * float(session["px_per_deg"]))
@@ -560,18 +561,18 @@ def merge(trials_path):
 
     samples, dropped, restarts = read_tracker(tracker_path)
     markers = read_markers(samples)
-    samples, interrupted = assign_trials(samples, markers, trials, iti_s)
+    samples, interrupted = assign_trials(samples, markers, trials, iti_ms)
     samples = label_recalibration(samples, markers)
     samples["blockStatus"] = block_status(samples, markers)
 
-    samples["psychopyTime_s"], fits, residual_ms = fit_clock(samples, markers, trials)
+    samples["psychopyTime_ms"], fits, residual_ms = fit_clock(samples, markers, trials)
     samples["gazeX"], samples["gazeY"] = gaze_point(samples)
     region = assign_regions(samples, trials, name_radius_px, centre_radius_px)
     samples["region"] = np.where(samples["gazeUnits"] == "raw", "", region)
     samples["whereGaze"] = where_gaze(samples, markers)
     samples["participantID"] = participant
 
-    gaze = samples[["participantID", "Timestamp", "psychopyTime_s", "trialN",
+    gaze = samples[["participantID", "Timestamp", "psychopyTime_ms", "trialN",
                     "trialRecorded", "phase", "block", "attempt",
                     "blockStatus", "targetObj", "previousObj", "trialPhase",
                     "gazeX", "gazeY", "gazeUnits", "region", "whereGaze"]]
@@ -597,8 +598,8 @@ def merge(trials_path):
     print(f"trials:   {samples['trialN'].nunique()} with samples; "
           f"interrupted (no trial-file row): {interrupted or 'none'}")
     for seg, (offset, rate, n_events) in sorted(fits.items()):
-        print(f"clock:    segment {seg}: PsychoPy = {offset:.4f} + {rate:.7f} "
-              f"x tracker  (drift {(rate - 1) * 1e6:.1f} ppm, {n_events} events)")
+        print(f"clock:    segment {seg}: PsychoPy ms = {offset:.1f} + {rate:.7f} "
+              f"x tracker ms  (drift {(rate - 1) * 1e6:.1f} ppm, {n_events} events)")
     print(f"fit:      {len(residual_ms)} events, residual sd "
           f"{residual_ms.std():.2f} ms, largest {abs(residual_ms).max():.2f} ms")
     lags = check_lag(samples, markers, trials)
@@ -641,7 +642,7 @@ def load_visits(gaze_path):
     samples = pd.read_csv(gaze_path, dtype={"participantID": str,
                                             "phase": str, "block": str,
                                             "attempt": str},
-                          keep_default_na=False, na_values={"psychopyTime_s": [""]})
+                          keep_default_na=False, na_values={"psychopyTime_ms": [""]})
     samples["trialN"] = pd.to_numeric(samples["trialN"]).astype("Int64")
     return visits(samples, float(session["DWELL_SELECTION.blinkTimeout_ms"]))
 

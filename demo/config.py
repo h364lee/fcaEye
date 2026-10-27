@@ -1,33 +1,37 @@
-"""Experiment settings.
+"""All experimental parameters
 
-Sections: 1 session, 2 counterbalancing, 3 session structure, 4 timing,
-5 gaze, 6 screen, 7 files, 8 stimuli, 9 text, 10 text screen style.
+Sections: 
+    1 session
+    2 counterbalancing
+    3 session structure
+    4 timing
+    5 gaze
+    6 screen
+    7 files
+    8 stimuli
+    9 text
+    10 text screen style.
+
 Objects are g0-g7; attributes are m0-m5.
 """
 
 from pathlib import Path
 
-# ==========================================================================
-# 1. SESSION
-# ==========================================================================
+# 1. SESSION ===============================================================
 
 SESSION = {
     "yesDemographics": True,     # False: skip the demographic questions
     "yesCalibration": True,      # False: skip calibration
 }
 
-# TEST: cuts each block to this many trials (None = full block).
-# Set all to None before real data.
+# cut down trial numbers for short demo. n trials or None for full trials
 DEMO_TRIALS = {
     "practice": None,       # per practice round
     "learning": None,       # per learning block
     "test": None,           # per test block
 }
 
-# ==========================================================================
-# 2. COUNTERBALANCING
-# ==========================================================================
-
+# 2. COUNTERBALANCING ======================================================
 COUNTERBALANCE = {
     "groupCell": 1,                 # row of GROUP_CELLS (1-8)
 }
@@ -48,54 +52,42 @@ GROUP_CELLS = {
 }
 
 
-# ==========================================================================
-# 3. SESSION STRUCTURE: practice -> learning 1 -> test 1
-#    (learning 2 and test 2 are off for now; see experiment.main)
-# ==========================================================================
+# 3. SESSION STRUCTURE =====================================================
+#   practice -> learning 1 -> test 1
 
 PHASES = {
     "practiceTrials": 1,           # trials per practice round
-    "learnBlockTrials": 32,        # trials per learning block; must be a
-                                   # multiple of the object count
-    "learnCriterion": 0.90,        # TEST value. Proportion correct needed in
-                                   # a block; a timeout counts as wrong
-    "learnCriterionBlocks": 3,     # TEST value. Consecutive blocks needed at
-                                   # or above learnCriterion
-    "learnMaxBlocks": 10,          # if criterion not met by then, the session
-                                   # ends (abandoned blocks do not count)
+    "learnBlockTrials": 32,        # trials per learning block: int * n_object 
+    "learnCriterion": 0.90,        # % correct trials needed in a block
+    "learnCriterionBlocks": 3,     # consecutive blocks needed to reach criterion
+    "learnMaxBlocks": 10,          # session ends if criterion is not met
 }
 
-# A test block is one Euler tour (design.trial_sequence): each transition
-# i -> j between consecutive trials appears equally often.
+# Euler tour (design.trial_sequence): each transition i -> j appears equally
+# often.
 EULER_TOUR = {
-    "stay_trial": True,     # allow i -> i (same object twice in a row)
-    "tour_repeats": 1,      # times each i -> j appears. 8 objects with stay:
-                            # 64 * repeats + 1 trials; without stay: 56.
+    "allow_stay": True,     # allow i -> i 
+    "tour_repeats": 1,      # times a tour repeats in a block.
 }
 
 
-# ==========================================================================
-# 4. TRIAL TIMING (seconds)
-# ==========================================================================
+# 4. TRIAL TIMING (ms) =====================================================
 
 TIMING = {
-    "previewDurRange": (0.6, 1.0),    # names shown before the object; random
-                                      # in this range
-    "feedbackDur": 2.0,               # feedback screen
-    "iti": 1.0,                       # blank screen between trials
-    "responseTimeout_s": 5.0,         # time allowed to select a name
+    "previewDurRange_ms": (600, 1000),  # time between name_on to object_on (random in this range)
+    "feedbackDur_ms": 2000,             # feedback screen
+    "iti_ms": 1000,                     # blank screen between trials
+    "responseTimeout_ms": 5000,         # time allowed to select a name
 }
 
 
-# ==========================================================================
-# 5. GAZE
-# ==========================================================================
+# 5. GAZE ==================================================================
 
 # Central fixation before each cue
 CENTRAL_FIXATION = {
     "centralHold_ms": 2000,      # gaze must stay on the dot this long
     "centralRadius_deg": 2,      # distance from centre that counts as on the dot
-    "centralTimeout_s": 20,      # not held by then: the session is aborted
+    "centralTimeout_ms": 20000,  # time allowed to fixate on the dot
 }
 
 # Selecting a name by looking at it
@@ -107,48 +99,47 @@ DWELL_SELECTION = {
                                 # longer resets it
 }
 
-# Live gaze state (whereGaze column of <stem>_gaze.csv): g0-g7, centre, other
-# or lost, recorded during trials from dot_on to feedback (or blank).
+# Live gaze state (recorded as whereGaze column in <stem>_gaze.csv): 
+# g0-g7, centre, other or lost
+# recorded during trials from dot_on to feedback.
 GAZE_STATE = {
     "interval_ms": 10,          # one state per interval of tracker time
 }
 
-# Calibration (values match CRS LiveTrack calibrate.py)
+# Calibration (refer to CRS LiveTrack calibrate.py)
 CALIBRATION = {
     "viewDist_mm": 850,             # eye to screen
-    "screenSize_mm": [400, 300],    # width, height of the visible screen
+    "screenSize_mm": [400, 300],    # width, height of the screen display
     "targets_deg": [                # target positions (x, y) from centre
         [-9.0,-9.0],[0,-9.0],[9.0,-9.0],
         [-9.0,0],[0,0],[9.0,0],
         [-9.0,9.0],[0,9.0],[9.0,9.0]
         ],
-    "setupDelay_ms": 1200.0,        # wait after a target appears before
+    "setupDelay_ms": 1200,          # wait after a target appears before
                                     # accepting a fixation
     "minFixDur_ms": 1200,           # length of a stable fixation
-    "fixTimeout_s": 5,              # give up on a target after this
+    "fixTimeout_ms": 5000,          # timeout for fixation
     "fixThreshold_px": 3.1,         # max spread of the pupil-glint vector
                                     # (camera px) for a stable fixation
     "fixInDot_deg": 0.3,            # target inner dot diameter
     "fixOutDot_deg": 0.6,           # target outer dot diameter
-    "calibrationCriterion_deg": 0.5,  # pass: error below this for both eyes
+    "calibrationCriterion_deg": 0.5,# pass: error (deg) below this for both eyes
 }
 
 
-# ==========================================================================
-# 6. SCREEN AND LAYOUT (pixels unless the name says otherwise)
-# ==========================================================================
+# 6. SCREEN AND LAYOUT (pixels unless the name says otherwise)==============
 
 DISPLAY = {
-    "size": [1024, 768],
+    "size": [1024, 768],       # px
     "fullscreen": True,
-    "bgColour": [0, 0, 0],     # PsychoPy rgb (-1 to 1); 0,0,0 = grey
+    "bgColour": [0, 0, 0],     # PsychoPy rgb; 0,0,0 = grey
     "units": "pix",
-    "screen" : 1,   # monitor index (0 = first)
+    "screen" : 1,              #(0 = experimenter; 1 = stimulus monitor)
 }
 
 GEOMETRY = {
     "ringRadius": 310,               # screen centre to each name
-    "objCount": 8,                   # objects (and names) on the ring
+    "objCount": 8,                   # n_objects (and names) on the ring
     "objSize_px": 120,               # object image size
     "height_name_px": 24,            # letter height of the names
     "centralDotRadius_px": 5,        # fixation dot radius
@@ -161,29 +152,22 @@ GEOMETRY = {
 }
 
 
-# ==========================================================================
-# 7. FILES
-# ==========================================================================
+# 7. FILES =================================================================
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
 PATHS = {
     "stimDir": PROJECT_DIR / "stimObj",                 # object images
-    "dataDir": PROJECT_DIR / "data",                    # output files
-    "debriefLetter": PROJECT_DIR / "demo" / "debrief_letter.txt",   # shown at the end
-    "fontDir": PROJECT_DIR / "demo" / "fonts",          # page fonts (PAGE_STYLE)
-    # SONA ID -> participant ID; the only link between them. Outside the
-    # project folder, so it is never in git or copied with the data.
-    "keyFile": PROJECT_DIR.parent / "participant_key" / "participant_key.csv",
+    "dataDir": PROJECT_DIR / "data",                    # output data files
+    "fontDir": PROJECT_DIR / "demo" / "fonts",          # page fonts
+    "keyFile": PROJECT_DIR.parent / "participant_key" / "participant_key.csv",  # SONA ID -> PID
+    "debriefLetter": PROJECT_DIR / "demo" / "debrief_letter.txt",   # debrief letter txt
+
 }
 
+# 8. STIMULI ===============================================================
 
-# ==========================================================================
-# 8. STIMULI
-# ==========================================================================
-
-# Formal contexts: rows are objects, columns attributes; 1 = the object
-# has the attribute. All contexts use the same object labels.
+# Formal context
 CONTEXT = {
     #     m0 m1 m2 m3 m4 m5
     "g0": [1, 1, 1, 0, 0, 0],
@@ -229,7 +213,7 @@ NAMES = {
     "g7": "Ruba",
 }
 
-# Name set B, used with object set 2. PLACEHOLDER: not yet matched to set A.
+# Name set B, used with object set 2.
 NAMES_B = {
     "g0": "Lobe",
     "g1": "Mafu",
@@ -241,7 +225,7 @@ NAMES_B = {
     "g7": "Zeli",
 }
 
-# PLACEHOLDER practice names, one per practice object below.
+# Practice names
 PRACTICE_NAMES = {
     "g0": "Dada",
     "g1": "Fifi",
@@ -288,14 +272,12 @@ ORDER = {
 }
 
 
-# ==========================================================================
-# 9. TEXT (everything participants read)
-# ==========================================================================
+# 9. TEXT ==================================================================
 
 SCREEN_TEXT = {
-    # Order below follows the session.
+    # Greeting screen
     "greeting": [
-        ("Welcome",
+        ("Welcome",                                                     
          "Welcome and thank you for taking part in this study.\n\n"
          "In this experiment, you will learn made-up names for visual "
          "shapes. You will choose names by looking at them, and an eye "
@@ -308,12 +290,14 @@ SCREEN_TEXT = {
          "researcher know.\n\n"
          "We will ask you a few demographic questions first."),
     ],
+
     # Demographic questions: (question, hint under the box)
-    "sonaId": ("What is your SONA ID?", "6 digits"),
+    "sonaId": ("What is your SONA ID?", ""),
     "age": ("What is your age?",
-            "You may skip this question: press Enter without typing"),
+            "press Enter to skip"),
     "gender": "What is your gender?",
     "selfDescribe": "Please describe your gender",
+
     # Instructions. Optional third part: small trial
     # pictures as (picture, caption). Pictures: "dot", "names", "cue",
     # "correct", "incorrect". They use practice objects and names.
@@ -343,6 +327,7 @@ SCREEN_TEXT = {
          "Before the task starts, you will go through calibration of the "
          "eye tracker."),
     ],
+
     "calibration": [
         ("Calibration",
          "You will go through the calibration process to adjust the "
@@ -351,14 +336,16 @@ SCREEN_TEXT = {
          "directly at each dot until it disappears.\n\n"
          "Please keep your head still on the chin rest."),
     ],
-    # Both eyes passed. A page with title "" shows its text
-    # in the middle of the screen.
+
+    # Calibration result
+    # success
     "calibrationDone": [("", "Calibration was successful.")],
-    # After a failed attempt; calibration then runs again
+    # failure
     "calibrationFailed": [
-        ("", "Calibration was not successful. We will do it again."),
+        ("", "Calibration wasn't successful. We'll do it again."),
     ],
-    # PLACEHOLDER: before the practice trials
+
+    # Practice screen
     "practice": [
         ("Practice",
          "You will first practise choosing names with your eyes, with a "
@@ -366,11 +353,13 @@ SCREEN_TEXT = {
          "After each practice trial, you can choose to practise again or "
          "move on to the task."),
     ],
+
     # After each practice round
     "practiceChoice": [
-        ("", "Press Space to practise again.\n\n"
-             "Press \u2192 to move on to the task."),
+        ("", "Press [Space] to practise again.\n\n"
+             "Press [\u2192] to move on to the task."),
     ],
+
     # Before learning 1, after the practice
     "learning": [
         ("Learning",
@@ -382,56 +371,68 @@ SCREEN_TEXT = {
          "Learning continues in rounds until you choose correctly most of "
          "the time. Please choose as quickly and accurately as you can."),
     ],
-    # After each learning round. Fields are filled in by
-    # experiment.run_learning; {next} is one of "roundEndNext".
+    
+    # After each learning round. 
+    # Fields are filled in by experiment.run_learning
     "roundEnd": [
         ("", "You chose the correct name on {percent}% of trials in round "
              "{round}.\n\n"
-             "Press \u2192 to move on to {next}."),
+             "Press [\u2192] to move on to {next}."),
     ],
     "roundEndNext": {
         "round": "the next round",      # criterion not met yet
         "test": "the test",             # criterion met
         "end": "the end of this part",  # last round, criterion not met
     },
+
+    # After criterion, before Testing phase.
     "test": [
         ("Test",
          "Now you will be tested on the names you learned.\n\n"
          "The task is the same as before, but you will not be given "
          "feedback whether your choices are correct."),
     ],
+
+    
     # Before learning 2 (not used now; kept for later)
     "learning2": [
         ("Learning",
          "You will now learn another new set of shapes with new names."),
     ],
+
     # After the last test, before the post-task questions
     "taskEnd": [
-        ("", "You have finished the task.\n\n"
+        ("", "You have now finished the experiment.\n\n"
              "We will ask a few optional questions about your experience."),
     ],
-    # After the post-task questions (POSTTASK); the debrief letter follows.
+
+    # After the post-task questions; before debrief letter.
     "thankYou": [
         ("Thank you for your participation!",
          "Please let the researcher know that you have finished.\n\n"
          "Continue to read the debrief form on the next pages."),
     ],
+
     # Last screen, after the debrief letter. Only Esc (the researcher) closes it.
     "callResearcher": [("", "Please call the researcher.")],
+
     # Shown before an abandoned round starts again
     "blockRestart": [
         ("", "The round will start again from the beginning."),
     ],
+
     # Learning: shown before the next round after an interrupted round
     "blockNext": [
         ("", "We will continue with the next round."),
     ],
-    # Pause screen (Esc); the researcher clicks one of PAUSE_BUTTONS
+
+    # Pause screen (Esc)
     "pause": [("Paused", "Please call the researcher.")],
+
     # After "End session", to confirm
     "endConfirm": [
         ("End the session?",
-         "The data recorded so far stay saved, and the participant goes "
+         "The data recorded so far will be saved. Move "
          "to the debrief letter."),
     ],
 }
@@ -459,8 +460,7 @@ GENDER_OPTIONS = [
     "Prefer not to answer",
 ]
 
-# Post-task questions, all optional. Asked from most open to most
-# specific, so earlier questions do not cue later ones.
+# Post-task questions (optional).
 POSTTASK = {
     "q1": "Did you notice any pattern? If yes, please describe it.",
     "q2": "Did you use any particular way of remembering the shape-name pairs?",
@@ -473,9 +473,7 @@ POSTTASK = {
 }
 
 
-# ==========================================================================
 # 10. LOOK OF TEXT SCREENS (instructions, questions, pause, debrief)
-# ==========================================================================
 
 # Text screens are white with black text; calibration and trials use
 # DISPLAY["bgColour"]. Colours are hex codes. Sizes in px.

@@ -127,7 +127,7 @@ def trial_sequence(seed, objects=None):
     random.seed(seed)
     try:
         tour = euler.Euler(stimuli=len(objects),
-                           stim_repeat=EULER_TOUR["stay_trial"],
+                           stim_repeat=EULER_TOUR["allow_stay"],
                            seq_repeats=EULER_TOUR["tour_repeats"])
         labels = tour.get_sequence()
     finally:
@@ -176,9 +176,9 @@ def check_design():
         raise ValueError(f"ORDER['ringOrder'] = {ring}: it must hold each of "
                          f"{list(CONTEXT)} exactly once")
 
-    if not isinstance(EULER_TOUR["stay_trial"], bool):
-        raise ValueError("EULER_TOUR['stay_trial'] must be True or False; "
-                         f"it is {EULER_TOUR['stay_trial']!r}")
+    if not isinstance(EULER_TOUR["allow_stay"], bool):
+        raise ValueError("EULER_TOUR['allow_stay'] must be True or False; "
+                         f"it is {EULER_TOUR['allow_stay']!r}")
     repeats = EULER_TOUR["tour_repeats"]
     if not isinstance(repeats, int) or repeats < 1:
         raise ValueError("EULER_TOUR['tour_repeats'] must be a whole number "
