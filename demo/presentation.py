@@ -19,8 +19,81 @@ from config import (DISPLAY, GEOMETRY, NAV_TEXT, PAGE_STYLE, PATHS,
 
 # Key names that do not equal the character they type.
 KEY_CHARS = {"space": " ", "minus": "-", "period": ".", "comma": ",",
-             "apostrophe": "'", "slash": "/", "semicolon": ";"}
+             "apostrophe": "'", "slash": "/", "semicolon": ";",
+             "equal": "=", "bracketleft": "[", "bracketright": "]",
+             "backslash": "\\", "grave": "`", "quoteleft": "`"}
 KEY_CHARS.update({f"num_{d}": str(d) for d in range(10)})
+
+# Characters typed with Shift held (US keyboard layout). The key name is
+# the unshifted key: Shift+1 arrives as "1" with shift in the modifiers.
+SHIFT_CHARS = {"1": "!", "2": "@", "3": "#", "4": "$", "5": "%", "6": "^",
+               "7": "&", "8": "*", "9": "(", "0": ")", "minus": "_",
+               "equal": "+", "bracketleft": "{", "bracketright": "}",
+               "backslash": "|", "semicolon": ":", "apostrophe": '"',
+               "comma": "<", "period": ">", "slash": "?", "grave": "~",
+               "quoteleft": "~"}
+
+
+def typed_char(key, mods):
+    """The character a key press types, or None (e.g. arrows, F-keys)."""
+    shift = bool(mods.get("shift"))
+    if shift and key in SHIFT_CHARS:
+        return SHIFT_CHARS[key]
+    char = KEY_CHARS.get(key, key)
+    if len(char) != 1:
+        return None
+    if char.isalpha() and shift != bool(mods.get("capslock")):
+        char = char.upper()
+    return char
+
+
+def _word_left(text, i):
+    """Cursor position at the start of the word before position i."""
+    while i > 0 and text[i - 1] == " ":
+        i -= 1
+    while i > 0 and text[i - 1] != " ":
+        i -= 1
+    return i
+
+
+def _word_right(text, i):
+    """Cursor position at the end of the word after position i."""
+    while i < len(text) and text[i] == " ":
+        i += 1
+    while i < len(text) and text[i] != " ":
+        i += 1
+    return i
+
+
+def edit_text(text, cursor, key, mods):
+    """Apply one key press to the text; return (text, cursor).
+
+    Left/Right move one character; with Ctrl, one word. Home/End go to the
+    start/end. Backspace and Delete remove the character before/after the
+    cursor; with Ctrl, the word. Other keys type their character at the
+    cursor.
+    """
+    ctrl = bool(mods.get("ctrl"))
+    if key == "left":
+        return text, _word_left(text, cursor) if ctrl else max(0, cursor - 1)
+    if key == "right":
+        return text, _word_right(text, cursor) if ctrl else min(len(text), cursor + 1)
+    if key == "home":
+        return text, 0
+    if key == "end":
+        return text, len(text)
+    if key == "backspace":
+        start = _word_left(text, cursor) if ctrl else max(0, cursor - 1)
+        return text[:start] + text[cursor:], start
+    if key == "delete":
+        end = _word_right(text, cursor) if ctrl else min(len(text), cursor + 1)
+        return text[:cursor] + text[end:], cursor
+    if ctrl:
+        return text, cursor          # Ctrl+letter shortcuts: type nothing
+    char = typed_char(key, mods)
+    if char is None:
+        return text, cursor
+    return text[:cursor] + char + text[cursor:], cursor + 1
 
 def _rgb(hex_colour):
     """"#RRGGBB" -> PsychoPy rgb, each channel from -1 to 1."""
@@ -754,55 +827,77 @@ class Presentation:
         return keys
 
     @_on_paper
-    def type_long_answer(self, question, progress="", max_len=300):
-        """Ask an open question in a large box; return the text, or None."""
-        draw = self._long_answer_screen(question, progress)
-        answer = ""
+    def type_long_answer(self, question, progress=""):
+        """Ask an open question in a large box; return the text, or None.
+
+        As the text grows, the letters get smaller so it stays inside the
+        box (see _long_answer_screen). Only when it no longer fits at the
+        smallest size (about 1,900 characters) are more characters refused.
+        Editing keys: see edit_text.
+        """
+        draw, fits = self._long_answer_screen(question, progress)
+        answer, cursor = "", 0
         event.clearEvents()
         while True:
-            draw(answer)
+            draw(answer, cursor)
             self.flip()
             for key, mods in self._posttask_keys(event.getKeys(modifiers=True)):
                 if key in ("return", "num_enter"):
                     return answer.strip() or None
-                if key == "backspace":
-                    answer = answer[:-1]
-                    continue
-                shift = mods.get("shift")
-                if key == "slash" and shift:
-                    char = "?"
-                else:
-                    char = KEY_CHARS.get(key, key)
-                if len(char) != 1:
-                    continue
-                if char.isalpha() and shift != mods.get("capslock"):
-                    char = char.upper()
-                if len(answer) < max_len:
-                    answer += char
+                text, new_cursor = edit_text(answer, cursor, key, mods)
+                if len(text) > len(answer) and not fits(text, new_cursor):
+                    continue                    # box full
+                answer, cursor = text, new_cursor
 
     def _long_answer_screen(self, question, progress=""):
-        """Build the type_long_answer screen; return draw(answer)."""
+        """Build the type_long_answer screen; return (draw(answer, cursor), fits(text))."""
         labels = [self._title(question, 220),
                   self._label(self.SKIP_HINT, -290, 18, DIM_TEXT)]
         if progress:
             labels.append(self._label(progress, 300, 18, DIM_TEXT))
         box = visual.Rect(self.win, width=800, height=300, pos=(0, -20),
                           fillColor=BOX_FILL, lineColor=BOX_LINE, lineWidth=1.5)
-        # Anchored at the box's top-left, so long answers wrap downward.
-        typed = visual.TextStim(self.win, text="", pos=(-385, 120), height=24,
-                                color=INK, wrapWidth=770,
-                                font=PAGE_STYLE["bodyFont"],
-                                fontFiles=FONT_BODY,
-                                anchorHoriz="left", anchorVert="top",
-                                alignText="left")
+        # One text per letter height, largest first; the first that fits the
+        # box is drawn. (One TextStim per height: changing .height does not
+        # update boundingBox until the text changes.) Anchored at the box's
+        # top-left, so long answers wrap downward.
+        sizes = [visual.TextStim(self.win, text="", pos=(-385, 120),
+                                 height=height, color=INK, wrapWidth=770,
+                                 font=PAGE_STYLE["bodyFont"],
+                                 fontFiles=FONT_BODY,
+                                 anchorHoriz="left", anchorVert="top",
+                                 alignText="left")
+                 for height in (24, 21, 18, 16, 14)]
+        fits_px = 280                   # box height minus a margin
+        # Laying out a long text takes tens of ms, so the result for the
+        # last text is kept, and the search starts one size above the size
+        # used last (one key press changes the length only a little).
+        last = {"text": None, "stim": None, "index": 0}
 
-        def draw(answer):
+        def fitting(text):
+            """The largest text stimulus that holds text inside the box, or None."""
+            if text != last["text"]:
+                last["text"], last["stim"] = text, None
+                for i in range(max(0, last["index"] - 1), len(sizes)):
+                    sizes[i].text = text
+                    if sizes[i].boundingBox[1] <= fits_px:
+                        last["stim"], last["index"] = sizes[i], i
+                        break
+            return last["stim"]
+
+        def shown(text, cursor):
+            return text[:cursor] + "|" + text[cursor:]      # "|" marks the cursor
+
+        def fits(text, cursor):
+            return fitting(shown(text, cursor)) is not None
+
+        def draw(answer, cursor):
             box.draw()
-            typed.text = answer + "|"
+            typed = fitting(shown(answer, cursor)) or sizes[-1]
             typed.draw()
             for label in labels:
                 label.draw()
-        return draw
+        return draw, fits
 
     @_on_paper
     def choose_images(self, question, images, progress=""):
